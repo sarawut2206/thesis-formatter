@@ -10,3 +10,9 @@ Desktop.ini
 # ไฟล์งานที่ผู้ใช้บันทึกออกมา
 *.docx
 thesis-project.json
+
+# ไฟล์ตั้งค่าเครื่องมือพัฒนา ไม่ใช่ส่วนหนึ่งของเว็บ
+.claude/
+launch.json
+settings.local.json
+settings.json
