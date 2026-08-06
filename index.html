@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>โปรแกรมจัดรูปแบบวิทยานิพนธ์ · Thesis Formatter</title>
+<meta name="description" content="วางข้อความบทที่ 1–5 แล้วได้ไฟล์ Word ที่จัดรูปแบบตามคู่มือการพิมพ์วิทยานิพนธ์โดยอัตโนมัติ">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <span class="logo">📄</span>
+    <div>
+      <h1>โปรแกรมจัดรูปแบบวิทยานิพนธ์</h1>
+      <p class="sub">วางข้อความ → ได้ไฟล์ Word ที่จัดรูปแบบตามคู่มือการพิมพ์วิทยานิพนธ์</p>
+    </div>
+  </div>
+  <div class="header-actions">
+    <label class="preset-pick" title="เลือกรูปแบบตามที่สถาบันกำหนด">
+      <span>รูปแบบ</span>
+      <select id="preset-select"></select>
+    </label>
+    <button id="btn-save"  class="btn ghost" title="บันทึกงานลงเครื่อง (ไฟล์ .json)">💾 บันทึกงาน</button>
+    <button id="btn-load"  class="btn ghost" title="เปิดไฟล์งานที่บันทึกไว้">📂 เปิดงาน</button>
+    <button id="btn-reset" class="btn ghost danger" title="ล้างข้อมูลทั้งหมด">🗑 ล้างข้อมูล</button>
+    <input type="file" id="file-load" accept=".json" hidden>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs"></nav>
+
+<main id="main"></main>
+
+<!-- ---------- แม่แบบ: หน้าแก้ไขบท ---------- -->
+<template id="tpl-editor">
+  <section class="editor">
+    <div class="pane pane-input">
+      <div class="pane-head">
+        <h2 class="pane-title"></h2>
+        <div class="pane-tools">
+          <button class="btn tiny js-sample">ตัวอย่างข้อความ</button>
+          <button class="btn tiny js-clear">ล้างช่อง</button>
+        </div>
+      </div>
+
+      <p class="hint js-hint"></p>
+
+      <textarea class="js-text" spellcheck="false"
+        placeholder="วางข้อความของบทนี้ที่นี่ …&#10;&#10;เคล็ดลับ&#10;• พิมพ์ # หน้าบรรทัด = หัวข้อหลัก&#10;• ## = หัวข้อรอง   ### = หัวข้อย่อย&#10;• **ข้อความ** = ตัวหนา"></textarea>
+
+      <div class="opts">
+        <label class="opt">
+          <span>การรวมบรรทัดที่ถูกตัด</span>
+          <select class="js-join">
+            <option value="auto">อัตโนมัติ (แนะนำ)</option>
+            <option value="always">รวมทุกบรรทัดจนกว่าจะเจอบรรทัดว่าง</option>
+            <option value="never">ไม่รวม (1 บรรทัด = 1 ย่อหน้า)</option>
+          </select>
+        </label>
+        <label class="opt chk">
+          <input type="checkbox" class="js-smart" checked>
+          <span>เดาหัวข้อจากบรรทัดสั้น ๆ อัตโนมัติ</span>
+        </label>
+        <label class="opt chk js-sort-wrap" hidden>
+          <input type="checkbox" class="js-sort" checked>
+          <span>เรียงลำดับรายการอัตโนมัติ (ไทยก่อน–อังกฤษหลัง)</span>
+        </label>
+      </div>
+
+      <div class="structure">
+        <div class="structure-head">
+          <h3>โครงสร้างที่ตรวจพบ <span class="js-count badge"></span></h3>
+          <button class="btn tiny js-reset-overrides">คืนค่าอัตโนมัติ</button>
+        </div>
+        <p class="hint small">ถ้าโปรแกรมแยกประเภทผิด เปลี่ยนได้จากช่องเลือกด้านซ้ายของแต่ละบรรทัด</p>
+        <div class="structure-list js-structure"></div>
+      </div>
+    </div>
+
+    <div class="pane pane-preview">
+      <div class="pane-head">
+        <h2 class="pane-title">ตัวอย่างเอกสาร</h2>
+        <div class="pane-tools">
+          <label class="zoom">ย่อ/ขยาย
+            <input type="range" class="js-zoom" min="40" max="130" value="75">
+            <span class="js-zoom-val">75%</span>
+          </label>
+          <button class="btn primary js-download">⬇ ดาวน์โหลด .docx</button>
+        </div>
+      </div>
+      <div class="preview-scroll"><div class="preview js-preview"></div></div>
+    </div>
+  </section>
+</template>
+
+<footer class="app-footer">
+  <span>ทำงานทั้งหมดในเครื่องของคุณ ไม่มีการส่งข้อมูลออกไปที่ใด</span>
+  <span class="dot">·</span>
+  <span>โปรแกรมโอเพนซอร์ส สัญญาอนุญาต MIT</span>
+</footer>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="js/zip.js"></script>
+<script src="js/templates.js"></script>
+<script src="js/parser.js"></script>
+<script src="js/docxgen.js"></script>
+<script src="js/preview.js"></script>
+<script src="js/frontmatter.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+# ระบบปฏิบัติการ
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ตัวแก้ไขโค้ด
+.vscode/
+.idea/
+
+# ไฟล์งานที่ผู้ใช้บันทึกออกมา
+*.docx
+thesis-project.json
