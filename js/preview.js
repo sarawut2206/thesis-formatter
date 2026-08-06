@@ -25,8 +25,66 @@ var TFPreview = (function () {
     }
   }
 
+  /** สร้าง element ของตาราง */
+  function makeTableEl(block, spec) {
+    var ts = spec.styles.table || spec.styles.body;
+    var rows = block.rows || [];
+    var wrap = document.createElement('div');
+    wrap.className = 'pv-block pv-table';
+    wrap.dataset.type = 'table';
+    wrap.style.fontFamily = spec.font.fallback || spec.font.name;
+    wrap.style.fontSize = ts.size + 'pt';
+    wrap.style.lineHeight = lineHeightCss(spec);
+    if (block.pageBreakBefore) wrap.dataset.pageBreak = '1';
+
+    var table = document.createElement('table');
+    var pad = (ts.cellPadding == null ? 4 : ts.cellPadding);
+    table.style.borderCollapse = 'collapse';
+    table.style.width = '100%';
+    table.style.tableLayout = 'fixed';
+
+    // ความกว้างคอลัมน์ถ่วงตามความยาวข้อความ (สูตรเดียวกับตอนสร้าง .docx)
+    var cols = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+    var weights = [];
+    for (var c = 0; c < cols; c++) {
+      var longest = 0;
+      rows.forEach(function (r) { longest = Math.max(longest, String(r[c] == null ? '' : r[c]).length); });
+      weights.push(Math.max(5, Math.min(longest, 42)));
+    }
+    var sum = weights.reduce(function (a, b) { return a + b; }, 0) || 1;
+
+    var colgroup = document.createElement('colgroup');
+    weights.forEach(function (w) {
+      var col = document.createElement('col');
+      col.style.width = (100 * w / sum).toFixed(2) + '%';
+      colgroup.appendChild(col);
+    });
+    table.appendChild(colgroup);
+
+    rows.forEach(function (row, ri) {
+      var isHead = block.header !== false && ri === 0;
+      var tr = document.createElement('tr');
+      for (var ci = 0; ci < cols; ci++) {
+        var td = document.createElement(isHead ? 'th' : 'td');
+        td.style.border = '1px solid #000';
+        td.style.padding = (pad / 2) + 'pt ' + pad + 'pt';
+        td.style.verticalAlign = 'middle';
+        td.style.fontWeight = isHead && ts.headerBold !== false ? '700' : '400';
+        td.style.textAlign = isHead ? (ts.headerAlign || 'center') : (ts.align || 'left');
+        td.style.wordBreak = 'break-word';
+        td.textContent = row[ci] == null ? '' : row[ci];
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    });
+
+    wrap.appendChild(table);
+    return wrap;
+  }
+
   /** สร้าง element ของย่อหน้าเดียว */
   function makeBlockEl(block, spec) {
+    if (block.type === 'table' && block.rows) return makeTableEl(block, spec);
     var type = block.type || 'body';
     var st = Object.assign({}, spec.styles[type] || spec.styles.body, block.style || {});
     var el = document.createElement('div');

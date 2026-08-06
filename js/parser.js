@@ -100,6 +100,8 @@ var TFParser = (function () {
     if (RE.num1.test(t) || RE.num2.test(t) || RE.num3.test(t) || RE.num4.test(t)) return true;
     if (RE.bullet.test(t) || RE.paren.test(t) || RE.thaiLetter.test(t)) return true;
     if (RE.centerWord.test(t)) return true;
+    if (isPipeRow(t) || isTableDivider(t)) return true;   // แถวของตาราง ห้ามรวมกับบรรทัดอื่น
+    if (tabCount(line) >= 1) return true;
     return false;
   }
 
@@ -139,6 +141,104 @@ var TFParser = (function () {
     return out;
   }
 
+  /* ------------------------------------------------------------------
+   * ตาราง
+   * รองรับ 2 รูปแบบที่นักเรียนคัดลอกมาบ่อยที่สุด
+   *   1) ขีดตั้ง (markdown)  | ลำดับ | รายการ | จำนวน |
+   *   2) แท็บคั่น (คัดลอกจาก Word/Excel)   ลำดับ⇥รายการ⇥จำนวน
+   * ------------------------------------------------------------------ */
+
+  /** บรรทัดคั่นหัวตารางแบบ markdown เช่น |---|:--:|---| */
+  function isTableDivider(line) {
+    var t = tidy(line);
+    return /^\|?[\s:|-]*-[\s:|-]*\|?$/.test(t) && t.indexOf('-') >= 0 && t.indexOf('|') >= 0;
+  }
+
+  function isPipeRow(line) {
+    var t = tidy(line);
+    if (t.indexOf('|') < 0) return false;
+    // ต้องมีอย่างน้อย 2 ช่อง และไม่ใช่ประโยคที่บังเอิญมีขีดตั้งอันเดียว
+    return (t.match(/\|/g) || []).length >= 2 || /^\|.*\|$/.test(t);
+  }
+
+  function splitPipeRow(line) {
+    var t = tidy(line).replace(/^\|/, '').replace(/\|$/, '');
+    return t.split('|').map(function (c) { return c.trim(); });
+  }
+
+  function tabCount(line) { return (String(line).match(/\t/g) || []).length; }
+
+  /** ทำให้ทุกแถวมีจำนวนช่องเท่ากัน */
+  function normalizeRows(rows) {
+    var cols = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+    return rows.map(function (r) {
+      var out = r.slice();
+      while (out.length < cols) out.push('');
+      return out.slice(0, cols);
+    });
+  }
+
+  /**
+   * พยายามอ่านตารางที่เริ่มต้นบรรทัด i
+   * @returns {null|{block, next}}
+   */
+  function readTable(lines, i) {
+    var first = tidy(lines[i]);
+    if (!first) return null;
+
+    // ---- แบบขีดตั้ง ----
+    if (isPipeRow(first)) {
+      var rows = [];
+      var hasHeader = false;
+      var j = i;
+      while (j < lines.length) {
+        var t = tidy(lines[j]);
+        if (t === '') break;
+        if (isTableDivider(t)) {
+          if (rows.length === 1) hasHeader = true;
+          j++;
+          continue;
+        }
+        if (!isPipeRow(t)) break;
+        rows.push(splitPipeRow(t));
+        j++;
+      }
+      if (rows.length >= 2 || (rows.length === 1 && hasHeader)) {
+        return {
+          block: { type: 'table', rows: normalizeRows(rows), header: hasHeader || rows.length > 1 },
+          next: j
+        };
+      }
+      return null;
+    }
+
+    // ---- แบบแท็บคั่น ----
+    var n = tabCount(lines[i]);
+    if (n >= 1 && !/^[\t ]/.test(lines[i])) {
+      var rows2 = [];
+      var k = i;
+      while (k < lines.length && tidy(lines[k]) !== '' && tabCount(lines[k]) === n) {
+        rows2.push(tidy(lines[k]).split('\t').map(function (c) { return c.trim(); }));
+        k++;
+      }
+      if (rows2.length >= 2) {
+        return {
+          block: { type: 'table', rows: normalizeRows(rows2), header: true },
+          next: k
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /** สรุปตารางเป็นข้อความสั้น ๆ สำหรับแสดงในตัวแก้โครงสร้าง */
+  function tableSummary(b) {
+    var cols = b.rows[0] ? b.rows[0].length : 0;
+    var head = (b.rows[0] || []).slice(0, 3).join(' · ');
+    return 'ตาราง ' + b.rows.length + ' แถว × ' + cols + ' คอลัมน์' + (head ? '  (' + head + ')' : '');
+  }
+
   /**
    * แยกวิเคราะห์ข้อความหนึ่งบท
    * @param {string} text ข้อความดิบ
@@ -167,6 +267,18 @@ var TFParser = (function () {
         if (opt.keepBlank) blocks.push({ type: 'blank', text: '' });
         prevType = 'blank';
         continue;
+      }
+
+      // ตารางกินหลายบรรทัด จึงต้องตรวจก่อนจำแนกย่อหน้าเดี่ยว
+      if (opt.tables !== false) {
+        var tbl = readTable(lines, i);
+        if (tbl) {
+          tbl.block.text = tableSummary(tbl.block);
+          blocks.push(tbl.block);
+          prevType = 'table';
+          i = tbl.next - 1;
+          continue;
+        }
       }
 
       var b = classify(t, {
@@ -351,6 +463,8 @@ var TFParser = (function () {
     outline: outline,
     thaiToArabic: thaiToArabic,
     tidy: tidy,
-    isThai: isThai
+    isThai: isThai,
+    readTable: readTable,
+    tableSummary: tableSummary
   };
 })();

@@ -4,13 +4,20 @@
 (function () {
   'use strict';
 
-  var LS_KEY = 'thesis-formatter-state-v1';
+  var LS_KEY = 'project-formatter-state-v1';
 
   /* ==================================================================
    * สถานะของโปรแกรม
    * ================================================================== */
   function emptyDoc(extra) {
     return Object.assign({ text: '', join: 'auto', smart: true, overrides: {} }, extra || {});
+  }
+
+  /** ผู้จัดทำหนึ่งคน — คีย์ตรงกับ TFTemplates.VITA_FIELDS */
+  function emptyPerson() {
+    var p = {};
+    TFTemplates.VITA_FIELDS.forEach(function (f) { p[f.key] = ''; });
+    return p;
   }
 
   function defaultState() {
@@ -25,27 +32,22 @@
         appendix: emptyDoc({ join: 'auto', smart: true })
       },
       meta: {
-        titleTh: '', titleEn: '', authorTh: '', authorEn: '', studentId: '',
-        degreeTh: '', degreeEn: '', degreeLevel: 'ปริญญาโท',
-        branchTh: '', fieldTh: '', facultyTh: '', schoolEn: '',
-        universityTh: TFTemplates.preset(TFTemplates.DEFAULT_PRESET).universityTh,
-        universityEn: TFTemplates.preset(TFTemplates.DEFAULT_PRESET).universityEn,
+        titleTh: '', titleEn: '',
+        authorsTh: '', authorsEn: '',
+        gradeLevel: 'มัธยมศึกษาปีที่ 2', gradeLevelEn: '',
+        subjectTh: '', subjectEn: '', learningArea: '',
+        schoolTh: '', schoolEn: '',
         yearTh: '', yearEn: '',
-        advisor1: '', advisor2: '', advisor1En: '', advisor2En: '',
-        approvalDate: '', chair: '', member1: '', member2: '', gradChair: '',
-        // เฉพาะรูปแบบชินวัตร
-        dean: '', examDate: '', siuCode: '', workType: 'วิทยานิพนธ์',
+        teacher1: '', teacher2: '', teacher1En: '',
+        headOfArea: '', director: '', approvalDate: '',
         keywordsTh: '', keywordsEn: ''
       },
       abstracts: { th: '', en: '' },
       ack: '',
-      vita: {
-        name: '', birthDate: '', birthPlace: '', education: '',
-        workPlace: '', position: '', address: '', phone: '', email: '', publications: ''
-      },
+      vita: [emptyPerson()],
       front: {
         coverTh: true, coverEn: false, approval: true,
-        abstractTh: true, abstractEn: true, ack: true,
+        abstractTh: true, abstractEn: false, ack: true,
         toc: true, tocMode: 'static', listTables: false, listFigures: false,
         tables: '', figures: ''
       },
@@ -99,14 +101,6 @@
     var pre = TFTemplates.preset(id);
     S.presetId = pre.id;
     S.spec = TFTemplates.clone(pre.spec);
-    // อัปเดตชื่อมหาวิทยาลัยให้ตรงชุด ถ้าผู้ใช้ยังไม่ได้แก้เอง
-    var others = TFTemplates.PRESET_ORDER.map(function (k) { return TFTemplates.PRESETS[k]; });
-    if (!S.meta.universityTh || others.some(function (p) { return p.universityTh === S.meta.universityTh; })) {
-      S.meta.universityTh = pre.universityTh;
-    }
-    if (!S.meta.universityEn || others.some(function (p) { return p.universityEn === S.meta.universityEn; })) {
-      S.meta.universityEn = pre.universityEn;
-    }
     save();
   }
 
@@ -202,8 +196,21 @@
     // ใส่ประเภทที่ผู้ใช้กำหนดเอง
     var ov = d.overrides || {};
     blocks.forEach(function (b) {
-      var k = overrideKey(b);
-      if (ov[k]) b.type = ov[k];
+      var to = ov[overrideKey(b)];
+      if (!to || to === b.type) return;
+
+      if (b.type === 'table' && b.rows) {
+        // เปลี่ยนตารางกลับเป็นข้อความธรรมดา
+        b.text = b.rows.map(function (r) { return r.join('  '); }).join('  ');
+        delete b.rows;
+      } else if (to === 'table' && !b.rows) {
+        // เปลี่ยนข้อความหนึ่งบรรทัดให้เป็นตารางแถวเดียว
+        var cells = String(b.text || '').split('|').map(function (c) { return c.trim(); }).filter(Boolean);
+        b.rows = [cells.length >= 2 ? cells : [b.text || '']];
+        b.header = false;
+        b.text = TFParser.tableSummary(b);
+      }
+      b.type = to;
     });
     return blocks;
   }
@@ -222,7 +229,7 @@
     { id: 'bib', label: 'บรรณานุกรม', kind: 'bib' },
     { id: 'appendix', label: 'ภาคผนวก', kind: 'appendix' },
     { id: 'front', label: 'ส่วนหน้า', kind: 'front' },
-    { id: 'vita', label: 'ประวัติผู้เขียน', kind: 'vita' },
+    { id: 'vita', label: 'ประวัติผู้จัดทำ', kind: 'vita' },
     { id: 'settings', label: 'ตั้งค่ารูปแบบ', kind: 'settings' },
     { id: 'export', label: 'ส่งออกทั้งเล่ม', kind: 'export' },
     { id: 'help', label: 'วิธีใช้', kind: 'help' }
@@ -262,7 +269,7 @@
    * หน้าแก้ไขบท / บรรณานุกรม / ภาคผนวก
    * ================================================================== */
   var HINTS = {
-    chapter: 'วางข้อความทั้งหมดของบทนี้ลงในช่องด้านล่าง โปรแกรมจะแยก “ชื่อบท / หัวข้อหลัก / หัวข้อรอง / เนื้อความ” ให้อัตโนมัติ แล้วจัดหน้า ฟอนต์ ขนาด และย่อหน้าตามคู่มือการพิมพ์วิทยานิพนธ์',
+    chapter: 'วางข้อความทั้งหมดของบทนี้ลงในช่องด้านล่าง โปรแกรมจะแยก “ชื่อบท / หัวข้อหลัก / เนื้อความ / ตาราง” ให้อัตโนมัติ แล้วจัดหน้า ฟอนต์ ขนาด และย่อหน้าตามรูปแบบมาตรฐาน · ตารางให้คั่นช่องด้วยเครื่องหมาย | หรือวางตารางจาก Word/Excel มาตรง ๆ ก็ได้',
     bib: 'วางรายการบรรณานุกรม บรรทัดละ 1 รายการ โปรแกรมจะจัดย่อหน้าแบบแขวน (บรรทัดแรกชิดซ้าย บรรทัดต่อไปเยื้องเข้า) และเรียงลำดับให้',
     appendix: 'วางเนื้อหาภาคผนวก บรรทัดที่เขียนว่า “ภาคผนวก ก” “ภาคผนวก ข” จะกลายเป็นหน้าคั่นกึ่งกลางโดยอัตโนมัติ'
   };
@@ -347,18 +354,18 @@
   function sampleFor(docId) {
     if (docId === 'ch1') return TFTemplates.SAMPLE_CH1;
     if (docId === 'bib') {
-      return TFTemplates.SAMPLE_BIB[S.presetId] || TFTemplates.SAMPLE_BIB.stou;
+      return TFTemplates.SAMPLE_BIB[S.presetId] || TFTemplates.SAMPLE_BIB.angsana;
     }
     if (docId === 'appendix') {
       return [
         'ภาคผนวก',
         '',
         'ภาคผนวก ก',
-        'แบบสอบถามที่ใช้ในการวิจัย',
+        'แบบสอบถามที่ใช้ในโครงงาน',
         '',
-        'แบบสอบถามฉบับนี้จัดทำขึ้นเพื่อเก็บรวบรวมข้อมูลประกอบการทำวิทยานิพนธ์ โดยแบ่งออกเป็น 3 ตอน',
+        'แบบสอบถามฉบับนี้จัดทำขึ้นเพื่อเก็บรวบรวมข้อมูลประกอบการทำโครงงาน โดยแบ่งออกเป็น 3 ตอน',
         '1. ข้อมูลทั่วไปของผู้ตอบแบบสอบถาม',
-        '2. ความคิดเห็นเกี่ยวกับการจัดการเรียนรู้',
+        '2. ความคิดเห็นเกี่ยวกับผลงานที่จัดทำ',
         '3. ข้อเสนอแนะเพิ่มเติม',
         '',
         'ภาคผนวก ข',
@@ -423,7 +430,7 @@
     if (!blocks.length) { toast('ยังไม่มีข้อความให้ส่งออก', true); return; }
 
     var name = tab.chapter ? ('บทที่-' + tab.chapter) : tab.label;
-    TFDocx.buildSingle(blocks, S.spec, { title: S.meta.titleTh, author: S.meta.authorTh })
+    TFDocx.buildSingle(blocks, S.spec, { title: S.meta.titleTh, author: S.meta.authorsTh })
       .then(function (blob) {
         TFDocx.download(blob, name + '.docx');
         toast('สร้างไฟล์ ' + name + '.docx แล้ว');
@@ -455,74 +462,48 @@
   function buildFront() {
     var m = S.meta, f = S.front;
     var pre = currentPreset();
-    var isSiu = S.spec.layout === 'siu';
     var wrap = el('div', { class: 'form-page' });
 
     wrap.appendChild(el('p', {
       class: 'notice',
-      text: 'กรอกข้อมูลเล่มที่นี่ครั้งเดียว โปรแกรมจะนำไปสร้าง ปกนอก ปกใน หน้าอนุมัติ บทคัดย่อ กิตติกรรมประกาศ และสารบัญ ให้อัตโนมัติในแท็บ “ส่งออกทั้งเล่ม” · ขณะนี้ใช้รูปแบบ: ' + pre.label
+      text: 'กรอกข้อมูลโครงงานที่นี่ครั้งเดียว โปรแกรมจะนำไปสร้าง ปก หน้ารับรอง บทคัดย่อ กิตติกรรมประกาศ และสารบัญ ให้อัตโนมัติในแท็บ “ส่งออกทั้งเล่ม” · ขณะนี้ใช้รูปแบบ: ' + pre.label
     }));
 
-    // ---- ข้อมูลทั่วไป ----
-    var c1 = el('div', { class: 'card' }, [el('h2', { text: 'ข้อมูลวิทยานิพนธ์' })]);
+    // ---- ข้อมูลโครงงาน ----
+    var c1 = el('div', { class: 'card' }, [el('h2', { text: 'ข้อมูลโครงงาน' })]);
     var g1 = el('div', { class: 'grid2' });
-    var rows1 = [
-      ['ชื่อวิทยานิพนธ์ (ไทย)', 'titleTh', { wide: true }],
-      ['ชื่อวิทยานิพนธ์ (อังกฤษ)', 'titleEn', { wide: true }],
-      ['ชื่อ–นามสกุลผู้เขียน (ไทย)', 'authorTh'],
-      ['ชื่อผู้เขียน (อังกฤษ)', 'authorEn'],
-      ['รหัสนักศึกษา', 'studentId'],
-      ['ระดับปริญญา', 'degreeLevel'],
-      ['หลักสูตร/ปริญญา (ไทย)', 'degreeTh', { placeholder: 'เช่น ศึกษาศาสตรมหาบัณฑิต' }],
-      ['หลักสูตร/ปริญญา (อังกฤษ)', 'degreeEn', { placeholder: 'e.g. Master of Education' }],
-      ['สาขาวิชา', 'fieldTh']
-    ];
-    if (isSiu) {
-      rows1.push(['คณะ', 'facultyTh', { placeholder: 'เช่น เทคโนโลยีสารสนเทศ' }]);
-      rows1.push(['ประเภทผลงาน', 'workType', { placeholder: 'วิทยานิพนธ์ / ดุษฎีนิพนธ์ / งานค้นคว้าอิสระ' }]);
-      rows1.push(['รหัสสิ่งพิมพ์ (SIU code)', 'siuCode', { placeholder: 'SIU THE-MT-2568-001' }]);
-    } else {
-      rows1.push(['แขนงวิชา', 'branchTh']);
-      rows1.push(['School (English)', 'schoolEn']);
-    }
-    rows1.push(['มหาวิทยาลัย (ไทย)', 'universityTh']);
-    rows1.push(['University (English)', 'universityEn']);
-    rows1.push(['ปีการศึกษา (พ.ศ.)', 'yearTh']);
-    rows1.push(['Academic year (ค.ศ.)', 'yearEn']);
-
-    rows1.forEach(function (r) {
+    [
+      ['ชื่อโครงงาน (ไทย)', 'titleTh', { wide: true, multiline: true, placeholder: 'ถ้าชื่อยาว กด Enter ขึ้นบรรทัดใหม่เพื่อแบ่งบรรทัดบนหน้าปก' }],
+      ['ชื่อโครงงาน (อังกฤษ) — ถ้ามี', 'titleEn', { wide: true }],
+      ['ชื่อผู้จัดทำ', 'authorsTh', { wide: true, multiline: true, placeholder: 'พิมพ์บรรทัดละ 1 คน\nเด็กหญิงสมหญิง ใจดี\nเด็กชายสมชาย เก่งกล้า' }],
+      ['ชื่อผู้จัดทำ (อังกฤษ) — ถ้ามี', 'authorsEn', { wide: true, multiline: true }],
+      ['ระดับชั้น', 'gradeLevel', { placeholder: 'มัธยมศึกษาปีที่ 2' }],
+      ['รายวิชา', 'subjectTh', { placeholder: 'เช่น วิทยาศาสตร์ 2 (ว22102)' }],
+      ['กลุ่มสาระการเรียนรู้', 'learningArea', { placeholder: 'เช่น วิทยาศาสตร์และเทคโนโลยี' }],
+      ['โรงเรียน', 'schoolTh'],
+      ['ปีการศึกษา', 'yearTh', { placeholder: '2568' }],
+      ['School (English) — ถ้ามี', 'schoolEn'],
+      ['Academic year (ค.ศ.) — ถ้ามี', 'yearEn']
+    ].forEach(function (r) {
       g1.appendChild(field(r[0], m[r[1]], function (v) { m[r[1]] = v; save(); }, r[2]));
     });
     c1.appendChild(g1);
     wrap.appendChild(c1);
 
-    // ---- อาจารย์ที่ปรึกษา / กรรมการ ----
+    // ---- ครูที่ปรึกษาและผู้รับรอง ----
     var c2 = el('div', { class: 'card' }, [
-      el('h2', { text: 'อาจารย์ที่ปรึกษาและคณะกรรมการสอบ' }),
-      el('p', { class: 'hint', text: 'ใช้ในหน้าอนุมัติและหน้าบทคัดย่อ' })
+      el('h2', { text: 'ครูที่ปรึกษาและผู้รับรอง' }),
+      el('p', { class: 'hint', text: 'ช่องไหนเว้นว่างไว้ จะไม่ปรากฏในหน้ารับรอง' })
     ]);
     var g2 = el('div', { class: 'grid2' });
-    var rows2 = isSiu ? [
-      ['อาจารย์ที่ปรึกษา', 'advisor1'],
-      ['อาจารย์ที่ปรึกษาร่วม (ถ้ามี)', 'advisor2'],
-      ['กรรมการ', 'member1'],
-      ['กรรมการภายนอก (ถ้ามี)', 'member2'],
-      ['คณบดี', 'dean', { placeholder: 'ตำแหน่งทางวิชาการ ชื่อ-นามสกุล' }],
-      ['เดือน ปีที่สอบ', 'examDate', { placeholder: 'เช่น พฤษภาคม 2568' }],
-      ['Thesis advisor 1 (English)', 'advisor1En'],
-      ['Thesis advisor 2 (English)', 'advisor2En']
-    ] : [
-      ['อาจารย์ที่ปรึกษาคนที่ 1', 'advisor1'],
-      ['อาจารย์ที่ปรึกษาคนที่ 2', 'advisor2'],
-      ['Thesis advisor 1 (English)', 'advisor1En'],
-      ['Thesis advisor 2 (English)', 'advisor2En'],
-      ['ประธานกรรมการสอบ', 'chair'],
-      ['กรรมการคนที่ 1', 'member1'],
-      ['กรรมการคนที่ 2', 'member2'],
-      ['ประธานกรรมการบัณฑิตศึกษา', 'gradChair'],
-      ['วันที่อนุมัติ', 'approvalDate', { placeholder: 'เช่น 15 พฤษภาคม 2568' }]
-    ];
-    rows2.forEach(function (r) {
+    [
+      ['ครูที่ปรึกษาโครงงาน', 'teacher1', { placeholder: 'เช่น นายสราวุธ ใจงาม' }],
+      ['ครูที่ปรึกษาร่วม (ถ้ามี)', 'teacher2'],
+      ['หัวหน้ากลุ่มสาระการเรียนรู้', 'headOfArea'],
+      ['ผู้อำนวยการโรงเรียน', 'director'],
+      ['วันที่อนุมัติ', 'approvalDate', { placeholder: 'เช่น 15 กันยายน 2568' }],
+      ['ครูที่ปรึกษา (อังกฤษ) — ถ้ามี', 'teacher1En']
+    ].forEach(function (r) {
       g2.appendChild(field(r[0], m[r[1]], function (v) { m[r[1]] = v; save(); }, r[2]));
     });
     c2.appendChild(g2);
@@ -545,11 +526,11 @@
     // ---- สารบัญตาราง/ภาพ ----
     var c4 = el('div', { class: 'card' }, [
       el('h2', { text: 'สารบัญตาราง / ' + pre.figureListTitle }),
-      el('p', { class: 'hint', text: 'พิมพ์บรรทัดละ 1 รายการ รูปแบบ:  เลขที่ | ชื่อเรื่อง | เลขหน้า   (เช่น  4.1 | ค่าเฉลี่ยผลสัมฤทธิ์ | 45)' })
+      el('p', { class: 'hint', text: 'พิมพ์บรรทัดละ 1 รายการ รูปแบบ:  เลขที่ | ชื่อเรื่อง | เลขหน้า   (เช่น  4.1 | ผลการทดลองครั้งที่ 1 | 18)' })
     ]);
     var g4 = el('div', { class: 'grid2' });
-    g4.appendChild(field('สารบัญตาราง', f.tables, function (v) { f.tables = v; save(); }, { multiline: true, wide: true, placeholder: '4.1 | ค่าเฉลี่ยและส่วนเบี่ยงเบนมาตรฐาน | 45' }));
-    g4.appendChild(field(pre.figureListTitle, f.figures, function (v) { f.figures = v; save(); }, { multiline: true, wide: true, placeholder: '4.1 | กรอบแนวคิดการวิจัย | 12' }));
+    g4.appendChild(field('สารบัญตาราง', f.tables, function (v) { f.tables = v; save(); }, { multiline: true, wide: true, placeholder: '4.1 | ผลการทดลองปลูกต้นไม้ | 18' }));
+    g4.appendChild(field(pre.figureListTitle, f.figures, function (v) { f.figures = v; save(); }, { multiline: true, wide: true, placeholder: '3.1 | ขั้นตอนการประดิษฐ์กระถาง | 12' }));
     c4.appendChild(g4);
     wrap.appendChild(c4);
 
@@ -602,24 +583,63 @@
   }
 
   /* ==================================================================
-   * ประวัติผู้วิจัย
+   * ประวัติผู้จัดทำ (รองรับหลายคน — โครงงานมักทำเป็นกลุ่ม)
    * ================================================================== */
   function buildVita() {
     var pre = currentPreset();
-    var wrap = el('div', { class: 'editor' });
-    var left = el('div', { class: 'pane' }, [
-      el('div', { class: 'pane-head' }, [el('h2', { class: 'pane-title', text: pre.vitaTitle })]),
-      el('p', { class: 'hint', text: 'หัวข้อในแบบฟอร์มนี้เปลี่ยนตามรูปแบบที่เลือกไว้ด้านบน · ช่องที่มีหลายบรรทัดกด Enter ขึ้นบรรทัดใหม่ได้' })
-    ]);
-    var g = el('div', { class: 'grid2' });
-    pre.vitaFields.forEach(function (fd) {
-      g.appendChild(field(fd.label, S.vita[fd.key], function (v) {
-        S.vita[fd.key] = v; save(); refresh();
-      }, { multiline: !!fd.multiline, wide: !!fd.multiline }));
-    });
-    left.appendChild(g);
+    if (!Array.isArray(S.vita)) S.vita = [emptyPerson()];
+    if (!S.vita.length) S.vita.push(emptyPerson());
 
+    var wrap = el('div', { class: 'editor' });
+    var left = el('div', { class: 'pane' });
     var pv = el('div', { class: 'preview' });
+
+    function refresh() {
+      pv.style.zoom = 0.7;
+      TFPreview.render(pv, TFFront.vita(S.vita, S.spec), S.spec, { startPage: 1 });
+    }
+
+    function renderForms() {
+      left.innerHTML = '';
+      left.appendChild(el('div', { class: 'pane-head' }, [
+        el('h2', { class: 'pane-title', text: pre.vitaTitle }),
+        el('div', { class: 'pane-tools' }, [
+          el('button', {
+            class: 'btn tiny', text: '+ เพิ่มผู้จัดทำ',
+            onclick: function () { S.vita.push(emptyPerson()); save(); renderForms(); refresh(); }
+          })
+        ])
+      ]));
+      left.appendChild(el('p', {
+        class: 'hint',
+        text: 'โครงงานที่ทำเป็นกลุ่ม กด “เพิ่มผู้จัดทำ” เพื่อใส่ประวัติของเพื่อนร่วมกลุ่มได้ · ช่องที่มีหลายบรรทัดกด Enter ขึ้นบรรทัดใหม่ได้'
+      }));
+
+      S.vita.forEach(function (person, idx) {
+        var card = el('div', { class: 'card', style: 'margin-bottom:12px' });
+        card.appendChild(el('div', { class: 'pane-head' }, [
+          el('h2', { text: 'ผู้จัดทำคนที่ ' + (idx + 1), style: 'font-size:14.5px' }),
+          S.vita.length > 1 ? el('button', {
+            class: 'btn tiny danger', text: 'ลบ',
+            onclick: function () {
+              if (!confirm('ลบประวัติผู้จัดทำคนที่ ' + (idx + 1) + '?')) return;
+              S.vita.splice(idx, 1);
+              if (!S.vita.length) S.vita.push(emptyPerson());
+              save(); renderForms(); refresh();
+            }
+          }) : null
+        ]));
+        var g = el('div', { class: 'grid2' });
+        pre.vitaFields.forEach(function (fd) {
+          g.appendChild(field(fd.label, person[fd.key], function (v) {
+            person[fd.key] = v; save(); refresh();
+          }, { multiline: !!fd.multiline, wide: !!fd.multiline }));
+        });
+        card.appendChild(g);
+        left.appendChild(card);
+      });
+    }
+
     var right = el('div', { class: 'pane' }, [
       el('div', { class: 'pane-head' }, [
         el('h2', { class: 'pane-title', text: 'ตัวอย่างเอกสาร' }),
@@ -627,7 +647,8 @@
           el('button', {
             class: 'btn primary', text: '⬇ ดาวน์โหลด .docx',
             onclick: function () {
-              TFDocx.buildSingle(TFFront.vita(S.vita, S.spec), S.spec, { title: S.meta.titleTh, author: S.meta.authorTh })
+              TFDocx.buildSingle(TFFront.vita(S.vita, S.spec), S.spec,
+                { title: S.meta.titleTh, author: S.meta.authorsTh })
                 .then(function (b) { TFDocx.download(b, pre.vitaTitle + '.docx'); toast('สร้างไฟล์แล้ว'); });
             }
           })
@@ -636,10 +657,7 @@
       el('div', { class: 'preview-scroll' }, [pv])
     ]);
 
-    function refresh() {
-      pv.style.zoom = 0.7;
-      TFPreview.render(pv, TFFront.vita(S.vita, S.spec), S.spec, { startPage: 1 });
-    }
+    renderForms();
     setTimeout(refresh, 0);
 
     wrap.appendChild(left);
@@ -870,7 +888,7 @@
     [
       ['coverTh', 'ปก (ภาษาไทย)'],
       ['coverEn', 'ปก (ภาษาอังกฤษ)'],
-      ['approval', 'หน้าอนุมัติ'],
+      ['approval', 'หน้ารับรองโครงงาน'],
       ['abstractTh', 'บทคัดย่อภาษาไทย'],
       ['abstractEn', 'บทคัดย่อภาษาอังกฤษ (Abstract)'],
       ['ack', 'กิตติกรรมประกาศ'],
@@ -938,13 +956,13 @@
       el('h2', { text: 'สร้างไฟล์' }),
       el('p', { class: 'hint', text: 'เมื่อเปิดใน Word ครั้งแรก แนะนำให้กด Ctrl+A แล้ว F9 เพื่ออัปเดตเลขหน้าและสารบัญ' })
     ]);
-    var btn = el('button', { class: 'btn primary', text: '⬇ ดาวน์โหลดวิทยานิพนธ์ทั้งเล่ม (.docx)' });
+    var btn = el('button', { class: 'btn primary', text: '⬇ ดาวน์โหลดรายงานโครงงานทั้งเล่ม (.docx)' });
     btn.addEventListener('click', function () {
       btn.disabled = true;
       btn.textContent = 'กำลังสร้างไฟล์…';
       exportWholeThesis().then(function () {
         btn.disabled = false;
-        btn.textContent = '⬇ ดาวน์โหลดวิทยานิพนธ์ทั้งเล่ม (.docx)';
+        btn.textContent = '⬇ ดาวน์โหลดรายงานโครงงานทั้งเล่ม (.docx)';
       });
     });
     cGo.appendChild(btn);
@@ -1006,19 +1024,18 @@
 
     // ---------- 3) ส่วนหน้าที่ใช้เลขหน้าแยกชุด (ก ข ค หรือ i ii iii) ----------
     if (ep.front) {
-      var isSiu = spec.layout === 'siu';
       var figTitle = currentPreset().figureListTitle;
 
       // นิยามแต่ละส่วน พร้อมชื่อที่จะไปปรากฏในสารบัญ
       var parts = [];
       if (f.approval)    parts.push({ key: 'approval', build: function () { return TFFront.approval(m, spec); } });
-      if (f.abstractTh)  parts.push({ key: 'abstractTh', toc: isSiu ? 'บทคัดย่อ' : 'บทคัดย่อภาษาไทย',
+      if (f.abstractTh)  parts.push({ key: 'abstractTh', toc: 'บทคัดย่อ',
                                       build: function () { return TFFront.abstractTh(m, spec, S.abstracts.th); } });
-      if (f.abstractEn)  parts.push({ key: 'abstractEn', toc: isSiu ? 'Abstract' : 'บทคัดย่อภาษาอังกฤษ',
+      if (f.abstractEn)  parts.push({ key: 'abstractEn', toc: 'Abstract',
                                       build: function () { return TFFront.abstractEn(m, spec, S.abstracts.en); } });
       if (f.ack)         parts.push({ key: 'ack', toc: 'กิตติกรรมประกาศ',
                                       build: function () { return TFFront.acknowledgement(S.ack, m, spec); } });
-      if (f.toc)         parts.push({ key: 'toc', toc: isSiu ? 'สารบัญ' : null, isToc: true });
+      if (f.toc)         parts.push({ key: 'toc', toc: 'สารบัญ', isToc: true });
       if (f.listTables)  parts.push({ key: 'listTables', toc: 'สารบัญตาราง',
                                       build: function () { return TFFront.listOf('table', parseListItems(f.tables), spec); } });
       if (f.listFigures) parts.push({ key: 'listFigures', toc: figTitle,
@@ -1094,9 +1111,9 @@
     // ตัด pageNumStart ที่เป็น null ออก (เพื่อให้ Word นับต่อเนื่อง)
     sections.forEach(function (s) { if (s.pageNumStart == null) delete s.pageNumStart; });
 
-    var fname = (m.titleTh ? m.titleTh.slice(0, 40).replace(/[\\/:*?"<>|]/g, '') : 'วิทยานิพนธ์') + '.docx';
+    var fname = (m.titleTh ? m.titleTh.slice(0, 40).replace(/[\\/:*?"<>|]/g, '') : 'รายงานโครงงาน') + '.docx';
 
-    return TFDocx.build({ sections: sections, spec: spec, meta: { title: m.titleTh, author: m.authorTh } })
+    return TFDocx.build({ sections: sections, spec: spec, meta: { title: m.titleTh, author: m.authorsTh } })
       .then(function (blob) {
         TFDocx.download(blob, fname);
         toast('สร้างไฟล์ ' + fname + ' แล้ว (' + sections.length + ' section)');
@@ -1125,6 +1142,20 @@
     }));
     wrap.appendChild(c1);
 
+    var c0 = el('div', { class: 'card help' });
+    c0.appendChild(el('h2', { text: 'รายงานโครงงานมีอะไรบ้าง' }));
+    c0.appendChild(el('ul', {
+      html:
+        '<li><b>ส่วนหน้า</b> — ปก · หน้ารับรอง · บทคัดย่อ · กิตติกรรมประกาศ · สารบัญ</li>' +
+        '<li><b>บทที่ 1 บทนำ</b> — ที่มาและความสำคัญ · วัตถุประสงค์ · สมมติฐาน · ขอบเขต · นิยามศัพท์เฉพาะ · ประโยชน์ที่คาดว่าจะได้รับ</li>' +
+        '<li><b>บทที่ 2 เอกสารและโครงงานที่เกี่ยวข้อง</b> — ความรู้ ทฤษฎี และโครงงานอื่นที่เกี่ยวข้อง</li>' +
+        '<li><b>บทที่ 3 วิธีดำเนินการโครงงาน</b> — วัสดุอุปกรณ์ · ขั้นตอนการดำเนินงาน · การเก็บและวิเคราะห์ข้อมูล</li>' +
+        '<li><b>บทที่ 4 ผลการดำเนินโครงงาน</b> — ผลการทดลอง ตาราง และภาพประกอบ</li>' +
+        '<li><b>บทที่ 5 สรุปผล อภิปรายผล และข้อเสนอแนะ</b></li>' +
+        '<li><b>ส่วนท้าย</b> — บรรณานุกรม · ภาคผนวก · ประวัติผู้จัดทำ</li>'
+    }));
+    wrap.appendChild(c1);
+
     var c2 = el('div', { class: 'card help' });
     c2.appendChild(el('h2', { text: 'เครื่องหมายช่วยกำกับ (ถ้าต้องการควบคุมเอง)' }));
     c2.appendChild(el('ul', {
@@ -1135,6 +1166,7 @@
         '<li><kbd>**ข้อความ**</kbd> = ตัวหนาในบรรทัด</li>' +
         '<li>บรรทัดที่ขึ้นต้นด้วย <kbd>1.1</kbd> <kbd>1.1.1</kbd> จะกลายเป็นหัวข้อรอง/ย่อยอัตโนมัติ</li>'
     }));
+    wrap.appendChild(c0);
     wrap.appendChild(c2);
 
     var c3 = el('div', { class: 'card help' });

@@ -179,6 +179,98 @@ var TFDocx = (function () {
            '<w:r>' + rpr + '<w:fldChar w:fldCharType="end"/></w:r>';
   }
 
+  /* ---------------- ตาราง ----------------
+   * สร้าง <w:tbl> จริง ไม่ใช่ข้อความคั่นด้วยแท็บ
+   * ความกว้างคอลัมน์ถ่วงตามความยาวข้อความ เพื่อให้คอลัมน์ชื่อยาวได้พื้นที่มากกว่า
+   */
+  function contentWidthTw(spec) {
+    return tw(spec.page.width - spec.page.marginLeft - spec.page.marginRight);
+  }
+
+  function columnWidths(rows, totalTw) {
+    var cols = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+    if (!cols) return [];
+    var weights = [];
+    for (var c = 0; c < cols; c++) {
+      var longest = 0;
+      rows.forEach(function (r) { longest = Math.max(longest, String(r[c] == null ? '' : r[c]).length); });
+      // จำกัดช่วงไว้ ไม่ให้คอลัมน์เดียวกินพื้นที่ทั้งหมด
+      weights.push(Math.max(5, Math.min(longest, 42)));
+    }
+    var sum = weights.reduce(function (a, b) { return a + b; }, 0);
+    var out = weights.map(function (w) { return Math.floor(totalTw * w / sum); });
+    out[out.length - 1] += totalTw - out.reduce(function (a, b) { return a + b; }, 0);
+    return out;
+  }
+
+  function tblBordersXml(sz) {
+    return '<w:tblBorders>' +
+      ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (side) {
+        return '<w:' + side + ' w:val="single" w:sz="' + sz + '" w:space="0" w:color="000000"/>';
+      }).join('') +
+      '</w:tblBorders>';
+  }
+
+  function cellParagraphXml(text, st, spec, styleId) {
+    var pPr = '<w:pPr><w:pStyle w:val="' + styleId + '"/>' +
+      spacingXml({ before: st.before || 0, after: st.after || 0 }, spec) +
+      '<w:ind w:left="0" w:right="0" w:firstLine="0"/>' +
+      jcXml(st.align) + rPrForPara(st, spec) + '</w:pPr>';
+    return '<w:p>' + pPr + runsXml(text, st, spec) + '</w:p>';
+  }
+
+  function tableXml(block, spec) {
+    var ts = spec.styles.table || spec.styles.body;
+    var rows = block.rows || [];
+    if (!rows.length) return '';
+
+    var widths = columnWidths(rows, contentWidthTw(spec));
+    var borderSz = ts.borderSize == null ? 4 : ts.borderSize;
+    var padTw = tw(ts.cellPadding == null ? 4 : ts.cellPadding);
+
+    var headStyle = {
+      size: ts.size, bold: ts.headerBold !== false,
+      align: ts.headerAlign || 'center', before: 0, after: 0
+    };
+    var cellStyle = { size: ts.size, bold: false, align: ts.align || 'left', before: 0, after: 0 };
+
+    var s = '<w:tbl><w:tblPr>' +
+      '<w:tblW w:w="' + contentWidthTw(spec) + '" w:type="dxa"/>' +
+      '<w:jc w:val="center"/>' +
+      tblBordersXml(borderSz) +
+      '<w:tblLayout w:type="fixed"/>' +
+      '<w:tblCellMar>' +
+        '<w:top w:w="' + Math.round(padTw / 2) + '" w:type="dxa"/>' +
+        '<w:left w:w="' + padTw + '" w:type="dxa"/>' +
+        '<w:bottom w:w="' + Math.round(padTw / 2) + '" w:type="dxa"/>' +
+        '<w:right w:w="' + padTw + '" w:type="dxa"/>' +
+      '</w:tblCellMar>' +
+      '</w:tblPr>';
+
+    s += '<w:tblGrid>' + widths.map(function (w) {
+      return '<w:gridCol w:w="' + w + '"/>';
+    }).join('') + '</w:tblGrid>';
+
+    rows.forEach(function (row, ri) {
+      var isHead = block.header !== false && ri === 0;
+      s += '<w:tr><w:trPr><w:cantSplit/>' + (isHead ? '<w:tblHeader/>' : '') + '</w:trPr>';
+      widths.forEach(function (w, ci) {
+        s += '<w:tc><w:tcPr>' +
+             '<w:tcW w:w="' + w + '" w:type="dxa"/>' +
+             '<w:vAlign w:val="center"/>' +
+             '</w:tcPr>' +
+             cellParagraphXml(row[ci] == null ? '' : row[ci],
+                              isHead ? headStyle : cellStyle, spec,
+                              isHead ? 'TFTableHead' : 'TFTableCell') +
+             '</w:tc>';
+      });
+      s += '</w:tr>';
+    });
+
+    s += '</w:tbl>';
+    return s;
+  }
+
   /* ---------------- คุณสมบัติ section ---------------- */
   function sectPrXml(sec, spec, rel) {
     var p = spec.page;
@@ -268,6 +360,13 @@ var TFDocx = (function () {
     s += styleDef('TFCenter',       'TF Center',         spec.styles.center,       spec);
     s += styleDef('TFBlank',        'TF Blank Line',     spec.styles.blank,        spec);
 
+    // สไตล์ในช่องตาราง — ไม่เยื้องบรรทัดแรก ไม่มีระยะห่างก่อน/หลัง
+    var ts = spec.styles.table || spec.styles.body;
+    s += styleDef('TFTableCell', 'TF Table Cell',
+      { size: ts.size, bold: false, align: ts.align || 'left', indent: 0, firstLine: 0, before: 0, after: 0 }, spec);
+    s += styleDef('TFTableHead', 'TF Table Head',
+      { size: ts.size, bold: ts.headerBold !== false, align: ts.headerAlign || 'center', indent: 0, firstLine: 0, before: 0, after: 0 }, spec);
+
     // หัว/ท้ายกระดาษ
     var hdr = { size: base.size, bold: false, align: 'center', before: 0, after: 0 };
     s += styleDef('Header', 'header', hdr, spec);
@@ -320,18 +419,28 @@ var TFDocx = (function () {
   function documentXml(sections, spec, rel) {
     var body = '';
     sections.forEach(function (sec, i) {
-      var blocks = sec.blocks || [];
+      var blocks = (sec.blocks || []).slice();
       var last = i === sections.length - 1;
       var sectPr = sectPrXml(sec, spec, rel);
 
-      if (!blocks.length) {
-        body += paragraphXml({ type: 'blank', text: '' }, spec, last ? {} : { sectPr: sectPr });
-        if (last) body += sectPr;
-        return;
+      // Word ต้องมีย่อหน้าคั่นหลังตารางเสมอ และย่อหน้าสุดท้ายของ section
+      // คือที่เก็บ sectPr จึงเติมย่อหน้าว่างต่อท้ายถ้าบล็อกสุดท้ายเป็นตาราง
+      if (!blocks.length || blocks[blocks.length - 1].type === 'table') {
+        blocks.push({ type: 'blank', text: '' });
       }
 
       blocks.forEach(function (b, j) {
         var isLastOfSection = j === blocks.length - 1;
+
+        if (b.type === 'table' && b.rows) {
+          body += tableXml(b, spec);
+          // ตารางสองอันติดกันจะถูก Word รวมเป็นตารางเดียว ถ้าไม่มีย่อหน้าคั่น
+          if (blocks[j + 1] && blocks[j + 1].type === 'table') {
+            body += paragraphXml({ type: 'blank', text: '' }, spec, {});
+          }
+          return;
+        }
+
         var extra = {};
         if (!last && isLastOfSection) extra.sectPr = sectPr;
         body += paragraphXml(b, spec, extra);

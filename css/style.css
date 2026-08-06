@@ -244,6 +244,9 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--brand); out
 .pv-content { position: relative; }
 .pv-block { word-wrap: break-word; overflow-wrap: break-word; }
 .pv-tab { display: inline-block; min-width: 36pt; }
+.pv-table { margin: 6pt 0; }
+.pv-table table { width: 100%; }
+.srow[data-t="table"] select { border-color: #b06a2c; color: #b06a2c; font-weight: 600; }
 .pv-measure { position: absolute; visibility: hidden; left: -99999px; top: 0; }
 .pv-page-label {
   position: absolute; bottom: -15px; right: 0;
