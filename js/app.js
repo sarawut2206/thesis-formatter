@@ -230,6 +230,7 @@
     { id: 'appendix', label: 'ภาคผนวก', kind: 'appendix' },
     { id: 'front', label: 'ส่วนหน้า', kind: 'front' },
     { id: 'vita', label: 'ประวัติผู้จัดทำ', kind: 'vita' },
+    { id: 'ai', label: '✨ ผู้ช่วย AI', kind: 'ai' },
     { id: 'settings', label: 'ตั้งค่ารูปแบบ', kind: 'settings' },
     { id: 'export', label: 'ส่งออกทั้งเล่ม', kind: 'export' },
     { id: 'help', label: 'วิธีใช้', kind: 'help' }
@@ -258,6 +259,7 @@
       case 'appendix': main.appendChild(buildEditor(tab)); break;
       case 'front':    main.appendChild(buildFront()); break;
       case 'vita':     main.appendChild(buildVita()); break;
+      case 'ai':       main.appendChild(buildAI()); break;
       case 'settings': main.appendChild(buildSettings()); break;
       case 'export':   main.appendChild(buildExport()); break;
       case 'help':     main.appendChild(buildHelp()); break;
@@ -336,6 +338,30 @@
     root.querySelector('.js-reset-overrides').addEventListener('click', function () {
       d.overrides = {}; save(); refresh(); toast('คืนค่าการแยกประเภทอัตโนมัติแล้ว');
     });
+
+    // ปุ่มให้ AI ร่างบทนี้ — แสดงเฉพาะบทที่ 2–5 และเมื่อใส่คีย์ไว้แล้ว
+    var aiBtn = root.querySelector('.js-ai');
+    if (tab.chapter >= 2 && tab.chapter <= 5) {
+      aiBtn.hidden = false;
+      aiBtn.addEventListener('click', function () {
+        if (!TFAI.hasKey()) {
+          toast('ยังไม่ได้ตั้งค่าคีย์ AI — ไปที่แท็บ “✨ ผู้ช่วย AI”', true);
+          S.activeTab = 'ai'; save(); renderTabs(); renderMain();
+          return;
+        }
+        if (ta.value.trim() && !confirm('บทนี้มีข้อความอยู่แล้ว จะให้ AI เขียนทับ?')) return;
+        aiBtn.disabled = true;
+        aiBtn.textContent = 'กำลังร่าง…';
+        aiDraftChapter(tab.chapter, '')
+          .then(function (text) {
+            ta.value = text;
+            refresh();
+            toast('AI ร่างบทที่ ' + tab.chapter + ' ให้แล้ว — อย่าลืมตรวจและแก้ไข');
+          })
+          .catch(function (e) { toast(e.message, true); })
+          .then(function () { aiBtn.disabled = false; aiBtn.textContent = '✨ ให้ AI ร่างบทนี้'; });
+      });
+    }
 
     zoom.addEventListener('input', function () {
       preview.style.zoom = (zoom.value / 100);
@@ -662,6 +688,220 @@
 
     wrap.appendChild(left);
     wrap.appendChild(right);
+    return wrap;
+  }
+
+  /* ==================================================================
+   * ผู้ช่วย AI
+   * ================================================================== */
+
+  /** ร่างบทหนึ่งด้วย AI แล้วใส่ลงในช่องข้อความของบทนั้น */
+  function aiDraftChapter(chapter, extra) {
+    var ch1 = (S.docs.ch1 && S.docs.ch1.text || '').trim();
+    if (!ch1) return Promise.reject(new Error('ต้องเขียนบทที่ 1 ก่อน แล้ว AI จึงจะร่างบทอื่นให้ได้'));
+    var prompt = TFAI.buildPrompt(chapter, ch1, S.meta, extra);
+    return TFAI.generate(prompt).then(function (text) {
+      var clean = TFAI.cleanOutput(text);
+      if (!clean) throw new Error('AI ตอบกลับมาว่าง');
+      S.docs['ch' + chapter].text = clean;
+      S.docs['ch' + chapter].overrides = {};
+      save();
+      return clean;
+    });
+  }
+
+  function buildAI() {
+    var wrap = el('div', { class: 'form-page' });
+    var cfg = TFAI.loadConfig();
+
+    wrap.appendChild(el('p', {
+      class: 'notice warn',
+      html: '<b>อ่านก่อนใช้</b> — AI ช่วย<b>ร่าง</b>โครงเนื้อหาเท่านั้น ไม่ได้ทำโครงงานแทนนักเรียน ' +
+            'ข้อความที่ได้ต้องให้นักเรียนอ่าน แก้ไข และเติมผลจริงด้วยตนเองทุกครั้ง ' +
+            'โดยเฉพาะ<b>ผลการทดลองและรายการอ้างอิง AI อาจแต่งขึ้นเองได้</b> ต้องตรวจสอบก่อนใช้เสมอ'
+    }));
+
+    // ---- ตั้งค่าคีย์ ----
+    var c1 = el('div', { class: 'card' }, [
+      el('h2', { text: 'เชื่อมต่อ AI' }),
+      el('p', {
+        class: 'hint',
+        html: 'เว็บนี้ไม่มีเซิร์ฟเวอร์ จึงต้องใช้ <b>คีย์ของคุณเอง</b> คีย์เก็บอยู่ในเบราว์เซอร์เครื่องนี้เท่านั้น ' +
+              'ไม่ถูกส่งไปที่ใดนอกจากผู้ให้บริการที่เลือก และ<b>ไม่ติดไปกับไฟล์ “บันทึกงาน”</b>'
+      })
+    ]);
+
+    var g1 = el('div', { class: 'grid2' });
+
+    var provSel = el('select', {
+      onchange: function () {
+        cfg.provider = provSel.value;
+        cfg.model = TFAI.PROVIDERS[cfg.provider].defaultModel;
+        TFAI.saveConfig(cfg);
+        renderMain();
+      }
+    });
+    TFAI.PROVIDER_ORDER.forEach(function (id) {
+      provSel.appendChild(el('option', { value: id, text: TFAI.PROVIDERS[id].label }));
+    });
+    provSel.value = cfg.provider;
+    g1.appendChild(el('div', { class: 'field' }, [el('label', { text: 'ผู้ให้บริการ' }), provSel]));
+
+    var prov = TFAI.PROVIDERS[cfg.provider];
+    g1.appendChild(field('ชื่อโมเดล', cfg.model, function (v) { cfg.model = v; TFAI.saveConfig(cfg); }));
+
+    var keyInput = el('input', {
+      type: 'password',
+      placeholder: 'วางคีย์ที่นี่',
+      oninput: function () { cfg.key = keyInput.value; TFAI.saveConfig(cfg); }
+    });
+    keyInput.value = cfg.key || '';
+    g1.appendChild(el('div', { class: 'field wide' }, [
+      el('label', { text: 'คีย์ (API key)' }), keyInput,
+      el('p', { class: 'hint small', html: prov.note + ' · <a href="' + prov.keyUrl + '" target="_blank" rel="noopener">ขอคีย์ที่นี่</a>' })
+    ]));
+
+    c1.appendChild(g1);
+
+    var status = el('span', { class: 'meta' });
+    var testBtn = el('button', {
+      class: 'btn', text: 'ทดสอบการเชื่อมต่อ',
+      onclick: function () {
+        status.textContent = 'กำลังทดสอบ…';
+        testBtn.disabled = true;
+        TFAI.test()
+          .then(function (t) { status.textContent = '✅ ใช้งานได้ — ' + t; })
+          .catch(function (e) { status.textContent = '❌ ' + e.message; })
+          .then(function () { testBtn.disabled = false; });
+      }
+    });
+    c1.appendChild(el('div', { class: 'pane-tools', style: 'margin-top:10px' }, [
+      testBtn,
+      el('button', {
+        class: 'btn ghost danger', text: 'ลบคีย์ออกจากเครื่อง',
+        onclick: function () {
+          if (!confirm('ลบคีย์ที่เก็บไว้ในเบราว์เซอร์นี้?')) return;
+          TFAI.clearConfig(); renderMain(); toast('ลบคีย์แล้ว');
+        }
+      }),
+      status
+    ]));
+    wrap.appendChild(c1);
+
+    // ---- สร้างบท ----
+    var c2 = el('div', { class: 'card' }, [
+      el('h2', { text: 'ให้ AI ร่างบทที่ 2–5 จากบทที่ 1' }),
+      el('p', {
+        class: 'hint',
+        text: 'AI จะอ่านบทที่ 1 ที่นักเรียนเขียนไว้ แล้วร่างบทอื่นให้ในรูปแบบที่โปรแกรมนำไปจัดหน้าได้ทันที — ข้อความเดิมในบทนั้นจะถูกแทนที่'
+      })
+    ]);
+
+    var extraBox = el('textarea', { placeholder: 'คำสั่งเพิ่มเติม (ไม่บังคับ) เช่น "เน้นเรื่องพลังงานทดแทน" หรือ "ให้มี 4 หัวข้อหลัก"' });
+    extraBox.style.minHeight = '70px';
+    c2.appendChild(el('div', { class: 'field' }, [el('label', { text: 'คำสั่งเพิ่มเติมถึง AI' }), extraBox]));
+
+    var log = el('div', { class: 'ai-log' });
+    var ch1Empty = !(S.docs.ch1.text || '').trim();
+
+    if (ch1Empty) {
+      c2.appendChild(el('p', { class: 'notice warn', text: 'ยังไม่มีเนื้อหาบทที่ 1 — กรุณาเขียนบทที่ 1 ก่อน' }));
+    }
+
+    var list = el('div', { class: 'export-list' });
+    [2, 3, 4, 5].forEach(function (n) {
+      var info = TFTemplates.CHAPTERS[n];
+      var has = (S.docs['ch' + n].text || '').trim().length > 0;
+      var btn = el('button', {
+        class: 'btn tiny', text: has ? 'ร่างใหม่ (ทับของเดิม)' : '✨ ให้ AI ร่าง',
+        onclick: function () {
+          if (has && !confirm('บทที่ ' + n + ' มีข้อความอยู่แล้ว จะให้ AI เขียนทับ?')) return;
+          btn.disabled = true; btn.textContent = 'กำลังร่าง…';
+          aiDraftChapter(n, extraBox.value)
+            .then(function () { toast('ร่างบทที่ ' + n + ' เสร็จแล้ว'); renderMain(); })
+            .catch(function (e) {
+              btn.disabled = false; btn.textContent = '✨ ให้ AI ร่าง';
+              log.textContent = 'บทที่ ' + n + ': ' + e.message;
+            });
+        }
+      });
+      btn.disabled = ch1Empty;
+      list.appendChild(el('div', { class: 'export-row' }, [
+        el('div', { style: 'flex:1' }, [
+          el('strong', { text: 'บทที่ ' + n + '  ' + info.title }),
+          el('div', { class: 'meta', text: has ? 'มีข้อความแล้ว ' + docBlocks('ch' + n).length + ' ย่อหน้า' : 'ยังว่าง' })
+        ]),
+        btn
+      ]));
+    });
+    c2.appendChild(list);
+
+    var allBtn = el('button', { class: 'btn primary', text: '✨ ร่างบทที่ 2–5 ทั้งหมด', style: 'margin-top:12px' });
+    allBtn.disabled = ch1Empty;
+    allBtn.addEventListener('click', function () {
+      if (!confirm('ให้ AI ร่างบทที่ 2 ถึง 5 ทั้งหมด?\nข้อความเดิมในบทเหล่านั้นจะถูกเขียนทับ')) return;
+      allBtn.disabled = true;
+      var chapters = [2, 3, 4, 5];
+      var i = 0;
+      log.textContent = '';
+      (function next() {
+        if (i >= chapters.length) {
+          allBtn.disabled = false;
+          toast('ร่างครบทุกบทแล้ว');
+          renderMain();
+          return;
+        }
+        var n = chapters[i++];
+        allBtn.textContent = 'กำลังร่างบทที่ ' + n + '… (' + i + '/4)';
+        aiDraftChapter(n, extraBox.value)
+          .then(function () { log.textContent += 'บทที่ ' + n + ': เสร็จแล้ว\n'; next(); })
+          .catch(function (e) {
+            log.textContent += 'บทที่ ' + n + ': ' + e.message + '\n';
+            next();
+          });
+      })();
+    });
+    c2.appendChild(allBtn);
+    c2.appendChild(log);
+    wrap.appendChild(c2);
+
+    // ---- บทคัดย่อ ----
+    var c3 = el('div', { class: 'card' }, [
+      el('h2', { text: 'ให้ AI ร่างบทคัดย่อ' }),
+      el('p', { class: 'hint', text: 'อ่านทุกบทที่เขียนไว้ แล้วสรุปเป็นบทคัดย่อ ผลลัพธ์จะไปอยู่ในแท็บ “ส่วนหน้า”' })
+    ]);
+    var absBtn = el('button', {
+      class: 'btn', text: '✨ ร่างบทคัดย่อ',
+      onclick: function () {
+        var all = [1, 2, 3, 4, 5].map(function (n) { return S.docs['ch' + n].text || ''; })
+          .filter(Boolean).join('\n\n');
+        if (!all.trim()) { toast('ยังไม่มีเนื้อหาให้สรุป', true); return; }
+        absBtn.disabled = true; absBtn.textContent = 'กำลังร่าง…';
+        TFAI.generate(TFAI.buildAbstractPrompt(all, S.meta))
+          .then(function (t) {
+            S.abstracts.th = TFAI.cleanOutput(t);
+            save();
+            toast('ร่างบทคัดย่อแล้ว — ดูได้ที่แท็บ “ส่วนหน้า”');
+          })
+          .catch(function (e) { log.textContent = e.message; })
+          .then(function () { absBtn.disabled = false; absBtn.textContent = '✨ ร่างบทคัดย่อ'; });
+      }
+    });
+    c3.appendChild(absBtn);
+    wrap.appendChild(c3);
+
+    // ---- สิ่งที่ AI จะไม่ทำให้ ----
+    var c4 = el('div', { class: 'card help' });
+    c4.appendChild(el('h2', { text: 'สิ่งที่ AI จะไม่ทำให้ (โดยตั้งใจ)' }));
+    c4.appendChild(el('ul', {
+      html:
+        '<li><b>ไม่แต่งผลการทดลอง</b> — จะเว้นเป็นวงเล็บให้นักเรียนกรอกผลจริง</li>' +
+        '<li><b>ไม่แต่งรายการบรรณานุกรม</b> — AI มักสร้างชื่อหนังสือและงานวิจัยที่ไม่มีอยู่จริง นักเรียนต้องค้นและพิมพ์เอง</li>' +
+        '<li><b>ไม่เปลี่ยนหัวข้อโครงงาน</b> — ร่างต่อยอดจากบทที่ 1 เท่านั้น</li>' +
+        '<li>ผลลัพธ์เป็นเพียง<b>ร่างแรก</b> ครูที่ปรึกษาและนักเรียนต้องตรวจและแก้ทุกครั้ง</li>'
+    }));
+    wrap.appendChild(c4);
+
     return wrap;
   }
 
@@ -1198,7 +1438,8 @@
       html:
         '<li>ตัวอย่างด้านขวาเป็นการ<b>ประมาณ</b>การแบ่งหน้า เลขหน้าจริงให้ยึดตามที่ Word แสดง</li>' +
         '<li>เครื่องที่เปิดไฟล์ต้องมีฟอนต์ที่เลือกไว้ (Windows ที่ติดตั้งภาษาไทยมี AngsanaUPC อยู่แล้ว)</li>' +
-        '<li>งานทั้งหมดถูกเก็บไว้ในเบราว์เซอร์ของคุณเอง ไม่ถูกส่งไปที่ใด — ใช้ปุ่ม “บันทึกงาน” เพื่อเก็บเป็นไฟล์สำรอง</li>' +
+        '<li>งานทั้งหมดเก็บไว้ในเบราว์เซอร์ของคุณเอง — ใช้ปุ่ม “บันทึกงาน” เพื่อเก็บเป็นไฟล์สำรอง</li>' +
+        '<li>ข้อความจะถูกส่งออกไปภายนอก<b>เฉพาะตอนกดใช้ผู้ช่วย AI</b> เท่านั้น ไปยังผู้ให้บริการที่คุณเลือกเอง</li>' +
         '<li>โปรแกรมช่วย<b>จัดรูปแบบ</b> ไม่ได้ตรวจความถูกต้องทางวิชาการหรือเขียนเนื้อหาให้</li>'
     }));
     wrap.appendChild(c4);

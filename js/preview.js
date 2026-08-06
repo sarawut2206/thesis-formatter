@@ -14,6 +14,16 @@ var TFPreview = (function () {
     return 'left';
   }
 
+  /**
+   * ใส่การจัดชิดขอบให้ element
+   * "ชิดขอบแบบไทย" (thaiDistribute) ของ Word ยืดบรรทัดสุดท้ายด้วย
+   * ส่วน "ชิดขอบ" (both) ปล่อยบรรทัดสุดท้ายชิดซ้ายตามปกติ
+   */
+  function applyAlign(style, a) {
+    style.textAlign = alignCss(a);
+    style.textAlignLast = (a === 'thaiDistribute') ? 'justify' : '';
+  }
+
   function lineHeightCss(spec) {
     var ls = spec.lineSpacing || { rule: 'single' };
     switch (ls.rule) {
@@ -95,7 +105,7 @@ var TFPreview = (function () {
     s.fontFamily = spec.font.fallback || spec.font.name;
     s.fontSize = st.size + 'pt';
     s.fontWeight = st.bold ? '700' : '400';
-    s.textAlign = alignCss(st.align);
+    applyAlign(s, st.align);
     s.lineHeight = lineHeightCss(spec);
     s.marginTop = (st.before || 0) + 'pt';
     s.marginBottom = (st.after || 0) + 'pt';

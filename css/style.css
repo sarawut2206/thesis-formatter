@@ -299,6 +299,18 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--brand); out
 }
 .notice.warn { border-color: #c98a12; background: color-mix(in srgb, #c98a12 12%, transparent); }
 
+.ai-log {
+  margin-top: 10px; padding: 8px 10px;
+  font-size: 12.5px; white-space: pre-wrap; color: var(--ink-soft);
+  border-left: 3px solid var(--line); min-height: 0;
+}
+.ai-log:empty { display: none; }
+.field input[type=password] {
+  width: 100%; font: inherit; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px;
+  font-family: ui-monospace, monospace;
+}
+
 /* ---------------- Footer / toast ---------------- */
 .app-footer {
   padding: 14px 20px 28px; text-align: center;
