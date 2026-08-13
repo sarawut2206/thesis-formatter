@@ -123,9 +123,16 @@ var TFPreview = (function () {
       el.innerHTML = '&nbsp;';
     } else {
       // แปลง **ตัวหนา** และแท็บ
-      var html = escapeHtml(text)
-        .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
-        .replace(/\t/g, '<span class="pv-tab"></span>');
+      var html = escapeHtml(text).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+      var tab = html.indexOf('\t');
+      if (st.hanging && tab > 0) {
+        // ย่อหน้าแบบแขวน: ทำให้หัวข้อรายการกว้างเท่าระยะแขวนพอดี
+        // ข้อความบรรทัดแรกจึงเริ่มตรงกับบรรทัดที่ตกลงมา เหมือนตำแหน่งแท็บใน Word
+        html = '<span style="display:inline-block;width:' + st.hanging + 'pt">' +
+               html.slice(0, tab) + '</span>' + html.slice(tab + 1).replace(/\t/g, '<span class="pv-tab"></span>');
+      } else {
+        html = html.replace(/\t/g, '<span class="pv-tab"></span>');
+      }
       el.innerHTML = html;
     }
     if (block.pageBreakBefore) el.dataset.pageBreak = '1';

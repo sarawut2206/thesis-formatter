@@ -389,7 +389,11 @@ var TFDocx = (function () {
       '<w:defaultTabStop w:val="720"/>' +
       '<w:characterSpacingControl w:val="compressPunctuation"/>' +
       (spec.options && spec.options.autoTocField ? '<w:updateFields w:val="true"/>' : '') +
-      '<w:compat><w:compatSetting w:name="compatibilityMode" ' +
+      // applyBreakingRules สั่งให้ Word ใช้กฎตัดบรรทัดของภาษาเอเชีย
+      // ถ้าไม่ใส่ Word จะตัดข้อความไทยได้แค่ตรงช่องว่าง ทำให้บรรทัดสั้นผิดปกติ
+      // แล้วต้องยืดตัวอักษรจนเห็นเป็นช่องว่างกลางคำ (ค่านี้มีในเทมเพลตวิทยานิพนธ์ของจริง)
+      '<w:compat><w:applyBreakingRules/><w:useFELayout/>' +
+      '<w:compatSetting w:name="compatibilityMode" ' +
       'w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>' +
       '<w:themeFontLang w:val="en-US" w:bidi="th-TH"/>' +
       '</w:settings>';

@@ -5,6 +5,8 @@
   'use strict';
 
   var LS_KEY = 'project-formatter-state-v1';
+  // เพิ่มเลขนี้เมื่อค่ารูปแบบมาตรฐานเปลี่ยน เพื่อให้ค่าที่ผู้ใช้บันทึกไว้ถูกปรับตาม
+  var SPEC_VERSION = 3;
 
   /* ==================================================================
    * สถานะของโปรแกรม
@@ -23,6 +25,7 @@
   function defaultState() {
     return {
       version: 2,
+      specVersion: SPEC_VERSION,
       activeTab: 'ch1',
       presetId: TFTemplates.DEFAULT_PRESET,
       spec: TFTemplates.clone(TFTemplates.preset(TFTemplates.DEFAULT_PRESET).spec),
@@ -67,8 +70,30 @@
       var o = JSON.parse(raw);
       // เติมค่าที่อาจขาดหายจากเวอร์ชันเก่า
       var d = defaultState();
-      return deepFill(o, d);
+      o = deepFill(o, d);
+      upgradeSpec(o);
+      return o;
     } catch (e) { return null; }
+  }
+
+  /**
+   * ปรับค่ารูปแบบที่ผู้ใช้เคยบันทึกไว้ให้เป็นแบบใหม่
+   *
+   * ค่ารูปแบบถูกเก็บไว้ในเครื่องผู้ใช้ การแก้ไฟล์แม่แบบอย่างเดียวจึงไม่ถึงคนที่เคยใช้แล้ว
+   * รายการเดิมเยื้องเฉพาะบรรทัดแรก ทำให้บรรทัดที่ตกลงมาย้อนไปชิดขอบซ้าย ผิดแบบเอกสารราชการ
+   * จึงเปลี่ยนเป็นเยื้องแบบแขวนให้อัตโนมัติ
+   */
+  function upgradeSpec(o) {
+    if (!o || !o.spec || !o.spec.styles) return;
+    if (o.specVersion === SPEC_VERSION) return;
+
+    var preset = TFTemplates.preset(o.presetId || TFTemplates.DEFAULT_PRESET);
+    var def = preset && preset.spec.styles.list;
+    if (def) {
+      // ใช้ค่ารายการชุดใหม่ทั้งหมด (เยื้องแขวน + ไม่กระจายตัวอักษร)
+      o.spec.styles.list = TFTemplates.clone(def);
+    }
+    o.specVersion = SPEC_VERSION;
   }
 
   function deepFill(target, defaults) {

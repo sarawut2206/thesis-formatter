@@ -42,7 +42,9 @@ var TFParser = (function () {
 
   /** ตัดช่องว่างหน้า-หลัง และยุบช่องว่างซ้ำ */
   function tidy(line) {
-    return String(line).replace(/^[\t ]+/, '').replace(/[ \t]{2,}/g, ' ').trim();
+    // แท็บเดี่ยวต้องกลายเป็นช่องว่างด้วย ไม่งั้น "1.<แท็บ>ข้อความ" จะจำแนกเป็นรายการไม่ได้
+    // (ส่วนที่ต้องใช้แท็บจริงเพื่อแยกช่องตาราง จะอ่านจากบรรทัดดิบ ไม่ผ่านฟังก์ชันนี้)
+    return String(line).replace(/^[\t ]+/, '').replace(/[ \t]+/g, ' ').trim();
   }
 
   /** คีย์สำหรับเทียบหัวข้อมาตรฐาน (ตัดเลขนำหน้า/ช่องว่าง/เครื่องหมายท้ายออก) */
@@ -168,6 +170,34 @@ var TFParser = (function () {
 
   function tabCount(line) { return (String(line).match(/\t/g) || []).length; }
 
+  /**
+   * คั่นหัวข้อรายการกับเนื้อความด้วยแท็บ เพื่อให้เยื้องแบบแขวนได้
+   *
+   * แบบเอกสารราชการ ข้อความที่ตกบรรทัดต้องตรงกับข้อความบรรทัดแรก ไม่ใช่ย้อนไปชิดขอบซ้าย
+   *      1.  ข้อความบรรทัดแรก
+   *          ข้อความที่ตกบรรทัดตรงกันพอดี
+   * แท็บนี้จะกลายเป็น <w:tab/> ในไฟล์ Word และดันข้อความไปยังตำแหน่งแขวน
+   */
+  function listText(t) {
+    var m = String(t).match(/^([\d๐-๙]+[.)]|[ก-ฮ][.)]|\([\d๐-๙ก-ฮa-zA-Z]+\)|[-–—•▪●◦*])\s+([\s\S]*)$/);
+    return m ? m[1] + '\t' + m[2].trim() : t;
+  }
+
+  /** ช่องแรกเป็นแค่ "หัวข้อรายการ" เช่น 1. 2. ก. • ไม่ใช่ข้อมูลในตาราง */
+  var LIST_MARKER = /^([\d๐-๙]+[.)]|[ก-ฮ][.)]|\([\d๐-๙ก-ฮa-zA-Z]+\)|[-–—•▪●◦*])$/;
+
+  /**
+   * รายการลำดับที่ใช้แท็บคั่นระหว่างเลขข้อกับข้อความ ไม่ใช่ตาราง
+   *
+   * นักเรียนมักพิมพ์ "1.<แท็บ>ข้อความ" หรือคัดลอกมาจากไฟล์ที่ใช้แท็บจัดย่อหน้า
+   * ถ้าปล่อยให้กลายเป็นตารางจะมีเส้นขอบขึ้นมา ซึ่งผิดรูปแบบเอกสารราชการ
+   * ตารางจริงที่มีคอลัมน์ลำดับจะเขียนว่า "1" เฉย ๆ ไม่มีจุดหรือวงเล็บ
+   */
+  function looksLikeList(rows) {
+    if (!rows.length || rows[0].length !== 2) return false;
+    return rows.every(function (r) { return LIST_MARKER.test(r[0]); });
+  }
+
   /** ทำให้ทุกแถวมีจำนวนช่องเท่ากัน */
   function normalizeRows(rows) {
     var cols = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
@@ -225,7 +255,7 @@ var TFParser = (function () {
         rows2.push(String(lines[k]).split('\t').map(function (c) { return c.trim(); }));
         k++;
       }
-      if (rows2.length >= 2) {
+      if (rows2.length >= 2 && !looksLikeList(rows2)) {
         return {
           block: { type: 'table', rows: normalizeRows(rows2), header: true },
           next: k
@@ -360,12 +390,12 @@ var TFParser = (function () {
     if (m1) {
       var rest = m1[2].trim();
       if (rest.length <= 60 && !looksLikeSentence(rest)) return { type: 'h1', text: t };
-      return { type: 'list', text: t };
+      return { type: 'list', text: listText(t) };
     }
 
     // 9) รายการย่อยแบบอื่น
     if (RE.bullet.test(t) || RE.paren.test(t) || RE.thaiLetter.test(t)) {
-      return { type: 'list', text: t };
+      return { type: 'list', text: listText(t) };
     }
 
     // 10) เดาหัวข้อจากลักษณะบรรทัด (สั้น ไม่จบประโยค และอยู่หลังบรรทัดว่าง)
