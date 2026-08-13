@@ -41,6 +41,8 @@
       <div class="pane-head">
         <h2 class="pane-title"></h2>
         <div class="pane-tools">
+          <button class="btn tiny js-import" title="ดึงข้อความจากไฟล์ PDF / Word / ข้อความ">📄 อัปโหลดไฟล์</button>
+          <input type="file" class="js-import-file" accept=".pdf,.docx,.txt,.md" hidden>
           <button class="btn tiny js-ai" hidden>✨ ให้ AI ร่างบทนี้</button>
           <button class="btn tiny js-sample">ตัวอย่างข้อความ</button>
           <button class="btn tiny js-clear">ล้างช่อง</button>
@@ -111,6 +113,7 @@
 <script src="js/docxgen.js"></script>
 <script src="js/preview.js"></script>
 <script src="js/frontmatter.js"></script>
+<script src="js/importer.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/app.js"></script>
 </body>

@@ -217,8 +217,12 @@ var TFParser = (function () {
     if (n >= 1 && !/^[\t ]/.test(lines[i])) {
       var rows2 = [];
       var k = i;
-      while (k < lines.length && tidy(lines[k]) !== '' && tabCount(lines[k]) === n) {
-        rows2.push(tidy(lines[k]).split('\t').map(function (c) { return c.trim(); }));
+      // แถวที่ช่องท้าย ๆ ว่าง จะมีแท็บน้อยกว่าหัวตาราง (ถูกตัดท้ายไปแล้ว)
+      // จึงยอมรับแถวที่มีแท็บ "ไม่เกิน" หัวตาราง แล้วเติมช่องว่างให้ครบทีหลัง
+      while (k < lines.length && String(lines[k]).trim() !== '' &&
+             tabCount(lines[k]) >= 1 && tabCount(lines[k]) <= n) {
+        // ต้องแยกจากบรรทัดดิบ เพราะ tidy() ยุบ \t\t เป็นช่องว่าง ทำให้ช่องว่างกลางแถวหาย
+        rows2.push(String(lines[k]).split('\t').map(function (c) { return c.trim(); }));
         k++;
       }
       if (rows2.length >= 2) {

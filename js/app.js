@@ -339,6 +339,38 @@
       d.overrides = {}; save(); refresh(); toast('คืนค่าการแยกประเภทอัตโนมัติแล้ว');
     });
 
+    // ---- นำเข้าข้อความจากไฟล์ PDF / Word / ข้อความ ----
+    var importBtn = root.querySelector('.js-import');
+    var importFile = root.querySelector('.js-import-file');
+    importBtn.addEventListener('click', function () { importFile.click(); });
+    importFile.addEventListener('change', function (e) {
+      var file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      if (ta.value.trim() && !confirm('ช่องนี้มีข้อความอยู่แล้ว จะแทนที่ด้วยข้อความจากไฟล์?')) return;
+
+      importBtn.disabled = true;
+      importBtn.textContent = 'กำลังอ่านไฟล์…';
+      TFImport.readFile(file)
+        .then(function (r) {
+          ta.value = r.text;
+          d.text = r.text;
+          d.overrides = {};
+          // ข้อความจาก PDF ถูกตัดเป็นบรรทัดสั้น ๆ จึงต้องรวมบรรทัดกลับ
+          if (r.kind === 'pdf') { d.join = 'auto'; joinSel.value = 'auto'; }
+          save();
+          refresh();
+          var msg = 'นำเข้าข้อความจาก ' + file.name + ' แล้ว';
+          if (r.pages) msg += ' (' + r.pages + ' หน้า)';
+          toast(r.warning ? msg + ' — ' + r.warning : msg);
+        })
+        .catch(function (err) { toast(err.message || 'อ่านไฟล์ไม่สำเร็จ', true); })
+        .then(function () {
+          importBtn.disabled = false;
+          importBtn.textContent = '📄 อัปโหลดไฟล์';
+        });
+    });
+
     // ปุ่มให้ AI ร่างบทนี้ — แสดงเฉพาะบทที่ 2–5 และเมื่อใส่คีย์ไว้แล้ว
     var aiBtn = root.querySelector('.js-ai');
     if (tab.chapter >= 2 && tab.chapter <= 5) {
