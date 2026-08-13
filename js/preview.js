@@ -125,7 +125,15 @@ var TFPreview = (function () {
       // แปลง **ตัวหนา** และแท็บ
       var html = escapeHtml(text).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
       var tab = html.indexOf('\t');
-      if (st.hanging && tab > 0) {
+      if (block.tabs && block.tabs.length && tab > 0) {
+        // ย่อหน้าที่กำหนดตำแหน่งแท็บไว้ (เช่น รายชื่อผู้จัดทำบนหน้าปก)
+        // ทำแต่ละช่วงให้กว้างเท่าระยะระหว่างตำแหน่งแท็บ คอลัมน์จึงตรงกันเหมือนใน Word
+        var stops = [st.indent || 0].concat(block.tabs.map(function (t) { return t.pos; }));
+        html = html.split('\t').map(function (seg, i) {
+          if (i >= stops.length - 1) return seg;
+          return '<span style="display:inline-block;width:' + (stops[i + 1] - stops[i]) + 'pt">' + seg + '</span>';
+        }).join('');
+      } else if (st.hanging && tab > 0) {
         // ย่อหน้าแบบแขวน: ทำให้หัวข้อรายการกว้างเท่าระยะแขวนพอดี
         // ข้อความบรรทัดแรกจึงเริ่มตรงกับบรรทัดที่ตกลงมา เหมือนตำแหน่งแท็บใน Word
         html = '<span style="display:inline-block;width:' + st.hanging + 'pt">' +

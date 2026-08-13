@@ -33,11 +33,23 @@ var TFFront = (function () {
     return spec.page.width - spec.page.marginLeft - spec.page.marginRight;
   }
 
-  /** แยกชื่อผู้จัดทำหลายคน (บรรทัดละคน) */
+  /** แยกชื่อผู้จัดทำหลายคน (บรรทัดละคน) — คงเครื่องหมายคั่นคอลัมน์ไว้ */
   function nameList(s) {
     return String(s || '').split('\n')
       .map(function (x) { return x.trim(); })
       .filter(Boolean);
+  }
+
+  /**
+   * ชื่อผู้จัดทำแบบข้อความธรรมดา
+   *
+   * บนหน้าปกใช้ | คั่นคอลัมน์เพื่อจัดชื่อ-นามสกุล-เลขที่ให้ตรงกัน
+   * แต่หน้าอื่น (หน้ารับรอง บทคัดย่อ) เขียนต่อกันเป็นบรรทัดเดียว จึงต้องตัดเครื่องหมายออก
+   */
+  function plainNames(s) {
+    return nameList(s).map(function (n) {
+      return n.replace(/\s*\|\s*/g, '  ').trim();
+    });
   }
 
   /** ประกอบข้อความ "รายวิชา ... กลุ่มสาระ ..." โดยข้ามช่องที่ว่าง */
@@ -48,43 +60,132 @@ var TFFront = (function () {
   /* ================================================================
    * ปก
    * ================================================================ */
+
+  /**
+   * แถวรายชื่อผู้จัดทำแบบจัดคอลัมน์
+   *
+   * ผู้ใช้พิมพ์บรรทัดละคน คั่นคอลัมน์ด้วย | หรือแท็บ เช่น
+   *   เด็กหญิงสมหญิง | ใจดี | เลขที่ 12
+   * ถ้าไม่ได้คั่นคอลัมน์ ก็จัดกึ่งกลางตามปกติ
+   *
+   * ความกว้างคอลัมน์คิดจากข้อความที่ยาวที่สุดของแต่ละคอลัมน์
+   * แล้วเยื้องทั้งก้อนให้อยู่กึ่งกลางหน้ากระดาษ เหมือนแบบฟอร์มปกทั่วไป
+   */
+  function authorRows(names, spec, style) {
+    var rows = names.map(function (n) {
+      return n.split(/\s*\|\s*|\t/).map(function (c) { return c.trim(); });
+    });
+    var cols = rows.reduce(function (mx, r) { return Math.max(mx, r.length); }, 1);
+    if (cols < 2) return names.map(function (n) { return C(n, style); });
+
+    // ความกว้างโดยประมาณ: อักษรไทย/ละตินกว้างราวครึ่งหนึ่งของขนาดตัวอักษร
+    var size = (style && style.size) || spec.styles.body.size;
+    var width = [];
+    for (var i = 0; i < cols; i++) {
+      var longest = rows.reduce(function (mx, r) {
+        return Math.max(mx, (r[i] || '').length);
+      }, 0);
+      width.push(longest * size * 0.5 + 18);
+    }
+    var total = width.reduce(function (a, b) { return a + b; }, 0);
+    var left = Math.max(0, (contentWidth(spec) - total) / 2);
+
+    var tabs = [], at = left;
+    for (var k = 0; k < cols - 1; k++) {
+      at += width[k];
+      tabs.push({ pos: at, type: 'left' });
+    }
+
+    return rows.map(function (r) {
+      var line = [];
+      for (var j = 0; j < cols; j++) line.push(r[j] || '');
+      return flat(line.join('\t'), {
+        tabs: tabs,
+        style: Object.assign({ indent: left }, style || {})
+      });
+    });
+  }
+
+  /**
+   * เกลี่ยบรรทัดว่างระหว่างกลุ่มให้ปกเต็มหน้าพอดีเสมอ
+   *
+   * ถ้ากำหนดจำนวนบรรทัดว่างตายตัว ปกจะล้นไปหน้าที่สองทันทีที่ชื่อโครงงานยาว
+   * หรือมีผู้จัดทำหลายคน จึงคำนวณที่ว่างที่เหลือแล้วแบ่งให้ช่องไฟทั้งสี่เท่า ๆ กัน
+   */
+  function spreadGroups(groups, spec) {
+    var lineOf = function (b) {
+      var size = (b.style && b.style.size) ||
+                 (spec.styles[b.type] && spec.styles[b.type].size) ||
+                 spec.styles.body.size;
+      return size * 1.45;
+    };
+    var used = 0;
+    groups.forEach(function (g) {
+      g.forEach(function (b) { used += lineOf(b); });
+    });
+
+    var pageHeight = spec.page.height - spec.page.marginTop - spec.page.marginBottom;
+    var blankHeight = spec.styles.body.size * 1.45;
+    var gaps = groups.length;                      // ช่องไฟบน + ระหว่างกลุ่ม
+    var free = Math.floor((pageHeight - used) / blankHeight) - 1;
+    var each = Math.max(1, Math.floor(free / gaps));
+
+    var out = [];
+    groups.forEach(function (g) {
+      if (!g.length) return;
+      out = out.concat(blank(each), g);
+    });
+    return out;
+  }
+
   function cover(m, spec, lang) {
     var isEn = lang === 'en';
     var titleStyle = { size: spec.styles.chapterTitle.size, bold: true };
-    var nameStyle = { size: spec.styles.h1.size, bold: true };
+    var nameStyle = { size: spec.styles.h1.size, bold: false };
 
-    var out = blank(5);
+    // ---- ชื่อโครงงาน (ไทย แล้วตามด้วยอังกฤษ) ----
+    var titleG = [];
+    String(m.titleTh || '').split('\n').filter(Boolean).forEach(function (line) {
+      titleG.push(C(line.trim(), titleStyle));
+    });
+    if (m.titleEn) titleG.push(C(m.titleEn.trim(), titleStyle));
+    if (m.projectCode) titleG.push(C('(' + m.projectCode.trim() + ')'));
 
-    // ชื่อโครงงาน
-    (isEn ? [m.titleEn] : String(m.titleTh || '').split('\n'))
-      .filter(Boolean)
-      .forEach(function (line) { out.push(C(line.trim(), titleStyle)); });
-
-    out = out.concat(blank(6));
-    out.push(C(isEn ? 'by' : 'โดย'));
-    out = out.concat(blank(1));
-
-    // ผู้จัดทำ (รองรับหลายคน)
-    var names = nameList(isEn ? m.authorsEn : m.authorsTh);
+    // ---- ผู้จัดทำ ----
+    var names = nameList(isEn && m.authorsEn ? m.authorsEn : m.authorsTh);
     if (!names.length) names = [''];
-    names.forEach(function (n) { out.push(C(n, nameStyle)); });
+    var byG = [C(isEn ? 'By' : 'โดย')].concat(blank(1), authorRows(names, spec, nameStyle));
 
-    out = out.concat(blank(6));
-
-    if (isEn) {
-      out.push(C('A Project Report Submitted in Partial Fulfillment'));
-      out.push(C(joinParts(['of the Course', m.subjectEn])));
-      out.push(C(m.schoolEn || ''));
-      out.push(C(joinParts(['Academic Year', m.yearEn])));
-    } else {
-      out.push(C('โครงงานนี้เป็นส่วนหนึ่งของการศึกษา'));
-      out.push(C(joinParts(['รายวิชา' + (m.subjectTh || ''),
-                            m.learningArea ? 'กลุ่มสาระการเรียนรู้' + m.learningArea : ''])));
-      out.push(C(joinParts(['ระดับชั้น' + (m.gradeLevel || '')])));
-      out.push(C(m.schoolTh || ''));
-      out.push(C(joinParts(['ปีการศึกษา', m.yearTh])));
+    // ---- ครูที่ปรึกษา ----
+    var teachers = [m.teacher1, m.teacher2].filter(function (t) { return t && t.trim(); });
+    var advG = [];
+    if (teachers.length) {
+      advG.push(C(isEn ? 'Advisor' : 'ครูที่ปรึกษา'));
+      teachers.forEach(function (t) { advG.push(C(t.trim())); });
     }
-    return out;
+
+    // ---- ข้อความท้ายปก ----
+    var footG = [];
+    if (isEn) {
+      footG.push(C(joinParts(['This report is part of the course', m.subjectEn])));
+      if (m.gradeLevelEn) footG.push(C(m.gradeLevelEn));
+      if (m.schoolEn) footG.push(C(m.schoolEn));
+      footG.push(C(joinParts(['Academic Year', m.yearEn])));
+    } else {
+      footG.push(C(joinParts(['รายงานฉบับนี้เป็นส่วนหนึ่งของรายวิชา', m.subjectTh])));
+      if (m.learningArea) footG.push(C('กลุ่มสาระการเรียนรู้' + m.learningArea));
+      footG.push(C(joinParts([
+        m.gradeLevel ? 'ระดับชั้น' + m.gradeLevel : '',
+        m.schoolTh || ''
+      ])));
+      footG.push(C(joinParts([
+        m.termTh ? 'ภาคเรียนที่ ' + m.termTh : '',
+        m.yearTh ? 'ปีการศึกษา ' + m.yearTh : ''
+      ])));
+    }
+    footG = footG.filter(function (b) { return b.text !== ''; });
+
+    return spreadGroups([titleG, byG, advG, footG], spec);
   }
 
   /* ================================================================
@@ -104,7 +205,7 @@ var TFFront = (function () {
 
     out.push(row('ชื่อโครงงาน', String(m.titleTh || '').split('\n')[0]));
 
-    var names = nameList(m.authorsTh);
+    var names = plainNames(m.authorsTh);
     names.forEach(function (n, i) {
       out.push(row(i === 0 ? 'ผู้จัดทำ' : '', (names.length > 1 ? (i + 1) + '. ' : '') + n));
     });
@@ -150,7 +251,7 @@ var TFFront = (function () {
     }
 
     out.push(row('ชื่อโครงงาน', String(m.titleTh || '').split('\n')[0]));
-    var names = nameList(m.authorsTh);
+    var names = plainNames(m.authorsTh);
     names.forEach(function (n, i) {
       out.push(row(i === 0 ? 'ผู้จัดทำ' : '', (names.length > 1 ? (i + 1) + '. ' : '') + n));
     });
@@ -177,7 +278,7 @@ var TFFront = (function () {
     }
 
     out.push(row('Project title', m.titleEn));
-    var names = nameList(m.authorsEn);
+    var names = plainNames(m.authorsEn);
     names.forEach(function (n, i) {
       out.push(row(i === 0 ? 'By' : '', n));
     });
@@ -212,7 +313,7 @@ var TFFront = (function () {
     out = out.concat(bodyBlocks(text));
     out = out.concat(blank(2));
 
-    var names = nameList(m.authorsTh);
+    var names = plainNames(m.authorsTh);
     if (names.length) {
       names.forEach(function (n) {
         out.push(flat(n, { style: { align: 'right' } }));

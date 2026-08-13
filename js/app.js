@@ -35,12 +35,12 @@
         appendix: emptyDoc({ join: 'auto', smart: true })
       },
       meta: {
-        titleTh: '', titleEn: '',
+        titleTh: '', titleEn: '', projectCode: '',
         authorsTh: '', authorsEn: '',
         gradeLevel: 'มัธยมศึกษาปีที่ 2', gradeLevelEn: '',
         subjectTh: '', subjectEn: '', learningArea: '',
         schoolTh: '', schoolEn: '',
-        yearTh: '', yearEn: '',
+        termTh: '', yearTh: '', yearEn: '',
         teacher1: '', teacher2: '', teacher1En: '',
         headOfArea: '', director: '', approvalDate: '',
         keywordsTh: '', keywordsEn: ''
@@ -49,7 +49,7 @@
       ack: '',
       vita: [emptyPerson()],
       front: {
-        coverTh: true, coverEn: false, approval: true,
+        coverTh: true, coverInner: false, coverEn: false, approval: true,
         abstractTh: true, abstractEn: false, ack: true,
         toc: true, tocMode: 'static', listTables: false, listFigures: false,
         tables: '', figures: ''
@@ -558,12 +558,14 @@
     [
       ['ชื่อโครงงาน (ไทย)', 'titleTh', { wide: true, multiline: true, placeholder: 'ถ้าชื่อยาว กด Enter ขึ้นบรรทัดใหม่เพื่อแบ่งบรรทัดบนหน้าปก' }],
       ['ชื่อโครงงาน (อังกฤษ) — ถ้ามี', 'titleEn', { wide: true }],
-      ['ชื่อผู้จัดทำ', 'authorsTh', { wide: true, multiline: true, placeholder: 'พิมพ์บรรทัดละ 1 คน\nเด็กหญิงสมหญิง ใจดี\nเด็กชายสมชาย เก่งกล้า' }],
+      ['รหัสโครงงาน — ถ้ามี', 'projectCode', { placeholder: 'เช่น ว-2568-012' }],
+      ['ชื่อผู้จัดทำ', 'authorsTh', { wide: true, multiline: true, placeholder: 'พิมพ์บรรทัดละ 1 คน\nอยากให้ชื่อ-นามสกุล-เลขที่ ตรงเป็นคอลัมน์ ให้คั่นด้วย |\nเด็กหญิงสมหญิง | ใจดี | เลขที่ 12\nเด็กชายสมชาย | เก่งกล้า | เลขที่ 15' }],
       ['ชื่อผู้จัดทำ (อังกฤษ) — ถ้ามี', 'authorsEn', { wide: true, multiline: true }],
       ['ระดับชั้น', 'gradeLevel', { placeholder: 'มัธยมศึกษาปีที่ 2' }],
       ['รายวิชา', 'subjectTh', { placeholder: 'เช่น วิทยาศาสตร์ 2 (ว22102)' }],
       ['กลุ่มสาระการเรียนรู้', 'learningArea', { placeholder: 'เช่น วิทยาศาสตร์และเทคโนโลยี' }],
       ['โรงเรียน', 'schoolTh'],
+      ['ภาคเรียนที่ — ถ้ามี', 'termTh', { placeholder: 'เช่น 1' }],
       ['ปีการศึกษา', 'yearTh', { placeholder: '2568' }],
       ['School (English) — ถ้ามี', 'schoolEn'],
       ['Academic year (ค.ศ.) — ถ้ามี', 'yearEn']
@@ -643,10 +645,14 @@
     function part(name, arr) {
       if (!arr || !arr.length) return;
       arr[0] = Object.assign({}, arr[0], { pageBreakBefore: blocks.length > 0 });
-      marks.push({ name: name, index: blocks.length });
+      if (name) marks.push({ name: name, index: blocks.length });
       blocks = blocks.concat(arr);
     }
 
+    // ปกไม่มีเลขหน้าและไม่นับในสารบัญ แต่ต้องเห็นในตัวอย่างด้วย
+    if (f.coverTh)     part('', TFFront.cover(m, spec, 'th'));
+    if (f.coverInner)  part('', TFFront.cover(m, spec, 'th'));
+    if (f.coverEn)     part('', TFFront.cover(m, spec, 'en'));
     if (f.approval)    part('หน้าอนุมัติ', TFFront.approval(m, spec));
     if (f.abstractTh)  part('บทคัดย่อภาษาไทย', TFFront.abstractTh(m, spec, S.abstracts.th));
     if (f.abstractEn)  part('บทคัดย่อภาษาอังกฤษ', TFFront.abstractEn(m, spec, S.abstracts.en));
@@ -1184,6 +1190,7 @@
     var gF = el('div', { class: 'grid2' });
     [
       ['coverTh', 'ปก (ภาษาไทย)'],
+      ['coverInner', 'หน้าปกใน (เนื้อหาเหมือนปก ใช้ตอนเข้าเล่ม)'],
       ['coverEn', 'ปก (ภาษาอังกฤษ)'],
       ['approval', 'หน้ารับรองโครงงาน'],
       ['abstractTh', 'บทคัดย่อภาษาไทย'],
@@ -1275,6 +1282,10 @@
     // ---------- 1) ปก (ไม่นับเลขหน้า) ----------
     if (ep.front && f.coverTh) {
       sections.push({ blocks: TFFront.cover(m, spec, 'th'), hidePageNumber: true, pageNumFormat: spec.pageNumber.frontFormat, pageNumStart: 1 });
+    }
+    // หน้าปกในใช้เนื้อหาชุดเดียวกับปก ต่างกันแค่เป็นคนละหน้า
+    if (ep.front && f.coverInner) {
+      sections.push({ blocks: TFFront.cover(m, spec, 'th'), hidePageNumber: true, pageNumFormat: spec.pageNumber.frontFormat });
     }
     if (ep.front && f.coverEn) {
       sections.push({ blocks: TFFront.cover(m, spec, 'en'), hidePageNumber: true, pageNumFormat: spec.pageNumber.frontFormat });
