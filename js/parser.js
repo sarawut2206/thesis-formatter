@@ -178,6 +178,20 @@ var TFParser = (function () {
    *          ข้อความที่ตกบรรทัดตรงกันพอดี
    * แท็บนี้จะกลายเป็น <w:tab/> ในไฟล์ Word และดันข้อความไปยังตำแหน่งแขวน
    */
+  /**
+   * ตัดจุด/ขีดนำหน้าที่ซ้ำซ้อนกับเลขหัวข้อออก
+   *
+   * ข้อความที่คัดลอกมาหรือที่ AI ร่างให้ มักได้เป็น "• 2.1 ข้อมูลทั่วไป"
+   * ซึ่งมีทั้งจุดนำและเลขหัวข้อ พอจัดรูปแบบแล้วจุดจะไปลอยอยู่ริมซ้าย
+   * ดูเหมือนมีอะไรเกินขึ้นมา ทั้งที่เลขหัวข้อทำหน้าที่เป็นตัวนำอยู่แล้ว
+   */
+  function stripRedundantBullet(t) {
+    var m = String(t).match(/^[-–—•▪●◦*]\s+([\s\S]*)$/);
+    if (!m) return t;
+    var rest = m[1].trim();
+    return (RE.num2.test(rest) || RE.num3.test(rest) || RE.num4.test(rest)) ? rest : t;
+  }
+
   function listText(t) {
     var m = String(t).match(/^([\d๐-๙]+[.)]|[ก-ฮ][.)]|\([\d๐-๙ก-ฮa-zA-Z]+\)|[-–—•▪●◦*])\s+([\s\S]*)$/);
     return m ? m[1] + '\t' + m[2].trim() : t;
@@ -381,6 +395,9 @@ var TFParser = (function () {
     if (t.length <= 120 && matchesKnownHeading(t, ctx.known)) return { type: 'h1', text: t };
 
     // 7) หัวข้อที่มีเลขกำกับหลายระดับ
+    //    ตัดจุดนำหน้าที่ซ้ำซ้อนออกก่อน เช่น "• 2.1 ข้อมูลทั่วไป" -> "2.1 ข้อมูลทั่วไป"
+    //    เพราะเลขหัวข้อทำหน้าที่เป็นตัวนำอยู่แล้ว เอกสารราชการไม่ใส่จุดซ้อนอีกชั้น
+    t = stripRedundantBullet(t);
     if (RE.num4.test(t)) return { type: 'h4', text: t };
     if (RE.num3.test(t)) return { type: 'h3', text: t };
     if (RE.num2.test(t)) return { type: 'h2', text: t };
