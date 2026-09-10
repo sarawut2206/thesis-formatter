@@ -24,6 +24,20 @@ var TFDocx = (function () {
       .replace(/"/g, '&quot;');
   }
 
+  /**
+   * ข้อความสำหรับเขียนลงไฟล์ Word
+   *
+   * แทรกจุดตัดคำไทย (ZWSP) ก่อน เพื่อให้ Word ขึ้นบรรทัดใหม่ได้ถูกที่
+   * แม้เครื่องปลายทางจะไม่ได้ติดตั้งภาษาไทย ปิดได้ที่ options.thaiWordBreak
+   */
+  function textXml(piece, spec) {
+    var on = !spec || !spec.options || spec.options.thaiWordBreak !== false;
+    if (on && typeof TFThai !== 'undefined' && TFThai.available()) {
+      return esc(TFThai.addBreaks(piece));
+    }
+    return esc(piece);
+  }
+
   var XMLDECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
 
   var NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' +
@@ -124,7 +138,7 @@ var TFDocx = (function () {
         if (idx > 0) out += '<w:r>' + rPrXml(st, spec, bold != null ? { bold: bold } : {}) + '<w:tab/></w:r>';
         if (piece === '') return;
         out += '<w:r>' + rPrXml(st, spec, bold != null ? { bold: bold } : {}) +
-               '<w:t xml:space="preserve">' + esc(piece) + '</w:t></w:r>';
+               '<w:t xml:space="preserve">' + textXml(piece, spec) + '</w:t></w:r>';
       });
     });
     return out;

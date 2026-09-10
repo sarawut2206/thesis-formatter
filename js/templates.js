@@ -51,7 +51,7 @@ var TFTemplates = (function () {
       hideOnFirstPageOfChapter: true,
       bodyFormat: 'decimal', frontFormat: 'thaiLetters'
     },
-    options: { chapterOnNewPage: true, autoTocField: false }
+    options: { chapterOnNewPage: true, autoTocField: false, thaiWordBreak: true }
   };
 
   /* ==================================================================
@@ -90,7 +90,7 @@ var TFTemplates = (function () {
       hideOnFirstPageOfChapter: true,
       bodyFormat: 'decimal', frontFormat: 'lowerRoman'
     },
-    options: { chapterOnNewPage: true, autoTocField: false }
+    options: { chapterOnNewPage: true, autoTocField: false, thaiWordBreak: true }
   };
 
   /* ------------------------------------------------------------------
@@ -167,6 +167,51 @@ var TFTemplates = (function () {
   /* ------------------------------------------------------------------
    * ชุดรูปแบบ (Preset) — เลือกได้จากแถบบนสุดของโปรแกรม
    * ------------------------------------------------------------------ */
+
+  /* ==================================================================
+   * ชุดที่ 3 — รายงานการวิจัยในชั้นเรียน 5 บท
+   *
+   * ค่าตามคู่มือรูปแบบรายงานวิจัยในชั้นเรียน (ใช้ส่งผลงานวิชาการ/วPA)
+   *   ขอบบน–ซ้าย 3.81 ซม. (1.5 นิ้ว เผื่อเข้าเล่ม) · ขอบขวา–ล่าง 2.54 ซม. (1 นิ้ว)
+   *   TH SarabunPSK · เนื้อความ 16 pt · ชื่อบท 20 pt · หัวข้อย่อย 18 pt
+   *   ย่อหน้าแรก 1.27 ซม. (36 pt) · ระยะบรรทัด 1.15
+   * ================================================================== */
+  var SPEC_RESEARCH = {
+    layout: 'research',
+    page: {
+      width: 595.3, height: 841.9,
+      marginTop: 108, marginBottom: 72, marginLeft: 108, marginRight: 72,
+      headerDistance: 36, footerDistance: 36
+    },
+    font: {
+      name: 'TH SarabunPSK',
+      fallback: "'TH SarabunPSK','TH Sarabun New','TH SarabunIT๙','Angsana New',serif"
+    },
+    styles: {
+      chapterNum:   { size: 20, bold: true,  align: 'center',         indent: 0,  firstLine: 0,  before: 0, after: 0 },
+      chapterTitle: { size: 20, bold: true,  align: 'center',         indent: 0,  firstLine: 0,  before: 0, after: 12 },
+      h1:           { size: 18, bold: true,  align: 'left',           indent: 0,  firstLine: 0,  before: 6, after: 0 },
+      h2:           { size: 16, bold: true,  align: 'left',           indent: 0,  firstLine: 36, before: 0, after: 0 },
+      h3:           { size: 16, bold: true,  align: 'left',           indent: 36, firstLine: 0,  before: 0, after: 0 },
+      h4:           { size: 16, bold: true,  align: 'left',           indent: 72, firstLine: 0,  before: 0, after: 0 },
+      body:         { size: 16, bold: false, align: 'thaiDistribute', indent: 0,  firstLine: 36, before: 0, after: 0 },
+      list:         { size: 16, bold: false, align: 'left',           indent: 60, hanging: 24,   before: 0, after: 0 },
+      quote:        { size: 16, bold: false, align: 'thaiDistribute', indent: 72, firstLine: 0,  before: 0, after: 0 },
+      caption:      { size: 16, bold: true,  align: 'left',           indent: 0,  firstLine: 0,  before: 6, after: 6 },
+      bib:          { size: 16, bold: false, align: 'left',           indent: 36, hanging: 36,   before: 0, after: 0 },
+      center:       { size: 16, bold: false, align: 'center',         indent: 0,  firstLine: 0,  before: 0, after: 0 },
+      table:        { size: 14, bold: false, align: 'left', headerBold: true, headerAlign: 'center', borderSize: 4, cellPadding: 4, before: 0, after: 0 },
+      blank:        { size: 16, bold: false, align: 'left',           indent: 0,  firstLine: 0,  before: 0, after: 0 }
+    },
+    lineSpacing: { rule: 'multiple', value: 1.15 },
+    pageNumber: {
+      show: true, position: 'right', size: 16,
+      hideOnFirstPageOfChapter: true,
+      bodyFormat: 'decimal', frontFormat: 'thaiLetters'
+    },
+    options: { chapterOnNewPage: true, autoTocField: false, thaiWordBreak: true }
+  };
+
   var PRESETS = {
     angsana: {
       id: 'angsana',
@@ -185,10 +230,19 @@ var TFTemplates = (function () {
       vitaLabelWidth: 144,
       figureListTitle: 'สารบัญภาพประกอบ',
       figurePrefix: 'ภาพที่ '
+    },
+    research: {
+      id: 'research',
+      label: 'แบบที่ 3 — รายงานวิจัยในชั้นเรียน',
+      note: 'ตามคู่มือรายงานวิจัย 5 บท · TH SarabunPSK · ขอบบน–ซ้าย 3.81 ซม. · ชื่อบท 20 pt · หัวข้อย่อย 18 pt · ย่อหน้า 1.27 ซม. · ระยะบรรทัด 1.15',
+      spec: SPEC_RESEARCH,
+      vitaLabelWidth: 144,
+      figureListTitle: 'สารบัญภาพ',
+      figurePrefix: 'ภาพที่ '
     }
   };
 
-  var PRESET_ORDER = ['angsana', 'sarabun'];
+  var PRESET_ORDER = ['angsana', 'sarabun', 'research'];
   var DEFAULT_PRESET = 'angsana';
 
   function preset(id) { return PRESETS[id] || PRESETS[DEFAULT_PRESET]; }

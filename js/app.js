@@ -1144,6 +1144,28 @@
     ]));
     wrap.appendChild(cSty);
 
+    // ---- การตัดคำไทย ----
+    var cTb = el('div', { class: 'card' }, [
+      el('h2', { text: 'การขึ้นบรรทัดใหม่ของข้อความไทย' }),
+      el('p', { class: 'hint', text:
+        'Word จะตัดบรรทัดภาษาไทยตามคำได้ ก็ต่อเมื่อเครื่องนั้นติดตั้งภาษาไทยไว้ ' +
+        'ถ้าไม่ได้ติดตั้ง Word จะตัดที่ช่องว่างอย่างเดียว ทำให้ขอบขวาไม่ตรงกัน ' +
+        'หรือมีช่องว่างกลางคำ เมื่อเปิดตัวเลือกนี้ โปรแกรมจะฝังจุดตัดคำที่มองไม่เห็นไว้ให้ ' +
+        'เอกสารจึงออกมาเหมือนกันทุกเครื่อง' })
+    ]);
+    var gTb = el('div', { class: 'grid2' });
+    gTb.appendChild(el('div', { class: 'field' }, [
+      checkbox('ฝังจุดตัดคำไทยให้ไฟล์ Word (แนะนำ)',
+        spec.options.thaiWordBreak !== false,
+        function (v) { spec.options.thaiWordBreak = v; save(); refresh(); })
+    ]));
+    cTb.appendChild(gTb);
+    if (typeof TFThai !== 'undefined' && !TFThai.available()) {
+      cTb.appendChild(el('p', { class: 'hint', text:
+        'เบราว์เซอร์นี้ตัดคำไทยไม่ได้ จึงข้ามขั้นนี้ไป — ลองใช้ Chrome หรือ Edge รุ่นใหม่' }));
+    }
+    wrap.appendChild(cTb);
+
     // ---- เลขหน้า ----
     var cPn = el('div', { class: 'card' }, [el('h2', { text: 'เลขหน้า' })]);
     var gPn = el('div', { class: 'grid2' });
