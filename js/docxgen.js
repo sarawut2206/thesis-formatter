@@ -41,7 +41,10 @@ var TFDocx = (function () {
   var XMLDECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
 
   var NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' +
-           'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+           'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+           'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" ' +
+           'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+           'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
 
   /* ---------------- แผนที่ประเภทย่อหน้า -> ชื่อสไตล์ ---------------- */
   var STYLE_ID = {
@@ -285,6 +288,41 @@ var TFDocx = (function () {
     return s;
   }
 
+  /* ---------------- รูปภาพ ----------------
+   * วางรูปแบบ inline กึ่งกลางย่อหน้า ขนาดเท่ากับตัวอย่างบนหน้าเว็บ (TFPhotos.fitPt)
+   * ย่อหน้าของรูปใช้ระยะบรรทัดอัตโนมัติเสมอ ไม่เช่นนั้นระยะบรรทัดแบบ "ตายตัว" จะตัดรูปจนเหลือแถบเดียว
+   */
+  var EMU_PER_PT = 12700;
+
+  function imageParagraphXml(block, spec, media, extra) {
+    var img = media && media.byId[block.photoId];
+    if (!img) {
+      return paragraphXml({ type: 'center', text: '[ไม่พบรูปภาพ]' }, spec, extra);
+    }
+    var size = (typeof TFPhotos !== 'undefined')
+      ? TFPhotos.fitPt(block.photoId, spec)
+      : { w: 300, h: 225 };
+    var cx = size.w * EMU_PER_PT, cy = size.h * EMU_PER_PT;
+    var n = img.n;
+    var pPr = '<w:pPr><w:pStyle w:val="TFCenter"/><w:keepNext/>' +
+      (block.pageBreakBefore ? '<w:pageBreakBefore/>' : '') +
+      '<w:spacing w:before="120" w:after="60" w:line="240" w:lineRule="auto"/>' +
+      '<w:ind w:left="0" w:right="0" w:firstLine="0"/><w:jc w:val="center"/>' +
+      (extra && extra.sectPr ? extra.sectPr : '') + '</w:pPr>';
+    var drawing =
+      '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +
+      '<wp:extent cx="' + cx + '" cy="' + cy + '"/>' +
+      '<wp:docPr id="' + n + '" name="ภาพ ' + n + '"/>' +
+      '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>' +
+      '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+      '<pic:pic><pic:nvPicPr><pic:cNvPr id="' + n + '" name="image' + n + '.jpeg"/><pic:cNvPicPr/></pic:nvPicPr>' +
+      '<pic:blipFill><a:blip r:embed="' + img.rid + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+      '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>' +
+      '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>' +
+      '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+    return '<w:p>' + pPr + drawing + '</w:p>';
+  }
+
   /* ---------------- คุณสมบัติ section ---------------- */
   function sectPrXml(sec, spec, rel) {
     var p = spec.page;
@@ -434,7 +472,7 @@ var TFDocx = (function () {
   }
 
   /* ---------------- document.xml ---------------- */
-  function documentXml(sections, spec, rel) {
+  function documentXml(sections, spec, rel, media) {
     var body = '';
     sections.forEach(function (sec, i) {
       var blocks = (sec.blocks || []).slice();
@@ -461,7 +499,7 @@ var TFDocx = (function () {
 
         var extra = {};
         if (!last && isLastOfSection) extra.sectPr = sectPr;
-        body += paragraphXml(b, spec, extra);
+        body += b.type === 'image' ? imageParagraphXml(b, spec, media, extra) : paragraphXml(b, spec, extra);
       });
 
       if (last) body += sectPr;
@@ -496,10 +534,24 @@ var TFDocx = (function () {
     var sections = input.sections || [];
     var rel = { header: 'rId3', headerBlank: 'rId4' };
 
+    // รูปที่ใช้จริงในเอกสาร (input.images = { รหัสรูป: { bytes, w, h } })
+    var media = { byId: {}, list: [] };
+    sections.forEach(function (sec) {
+      (sec.blocks || []).forEach(function (b) {
+        if (b.type !== 'image' || media.byId[b.photoId]) return;
+        var data = input.images && input.images[b.photoId];
+        if (!data || !data.bytes) return;
+        var n = media.list.length + 1;
+        media.byId[b.photoId] = { n: n, rid: 'rIdImg' + n, file: 'media/image' + n + '.jpeg', bytes: data.bytes };
+        media.list.push(media.byId[b.photoId]);
+      });
+    });
+
     var contentTypes = XMLDECL +
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
       '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Default Extension="jpeg" ContentType="image/jpeg"/>' +
       '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
       '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
       '<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>' +
@@ -522,31 +574,36 @@ var TFDocx = (function () {
       '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>' +
       '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>' +
       '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header2.xml"/>' +
+      media.list.map(function (m) {
+        return '<Relationship Id="' + m.rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="' + m.file + '"/>';
+      }).join('') +
       '</Relationships>';
 
-    return TFZip.create([
+    var files = [
       { name: '[Content_Types].xml',        data: contentTypes },
       { name: '_rels/.rels',                data: rootRels },
       { name: 'docProps/core.xml',          data: coreXml(meta) },
       { name: 'docProps/app.xml',           data: appXml() },
-      { name: 'word/document.xml',          data: documentXml(sections, spec, rel) },
+      { name: 'word/document.xml',          data: documentXml(sections, spec, rel, media) },
       { name: 'word/_rels/document.xml.rels', data: docRels },
       { name: 'word/styles.xml',            data: stylesXml(spec) },
       { name: 'word/settings.xml',          data: settingsXml(spec) },
       { name: 'word/header1.xml',           data: headerXml(spec) },
       { name: 'word/header2.xml',           data: blankHeaderXml() }
-    ]);
+    ];
+    media.list.forEach(function (m) { files.push({ name: 'word/' + m.file, data: m.bytes }); });
+    return TFZip.create(files);
   }
 
   /** สร้างเอกสารจากบล็อกชุดเดียว (เอกสารบทเดียว) */
-  function buildSingle(blocks, spec, meta, secOpt) {
+  function buildSingle(blocks, spec, meta, secOpt, images) {
     var sec = Object.assign({
       blocks: blocks,
       titlePg: !!(spec.pageNumber && spec.pageNumber.hideOnFirstPageOfChapter),
       pageNumFormat: (spec.pageNumber && spec.pageNumber.bodyFormat) || 'decimal',
       pageNumStart: 1
     }, secOpt || {});
-    return build({ sections: [sec], spec: spec, meta: meta || {} });
+    return build({ sections: [sec], spec: spec, meta: meta || {}, images: images || {} });
   }
 
   /** ดาวน์โหลด Blob เป็นไฟล์ */

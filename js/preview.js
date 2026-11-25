@@ -92,9 +92,37 @@ var TFPreview = (function () {
     return wrap;
   }
 
+  /** รูปภาพ — กำหนดขนาดไว้ก่อนโหลดรูป การแบ่งหน้าจึงคำนวณได้ทันที */
+  function makeImageEl(block, spec) {
+    var wrap = document.createElement('div');
+    wrap.className = 'pv-block pv-image';
+    wrap.dataset.type = 'image';
+    wrap.style.textAlign = 'center';
+    wrap.style.marginTop = '6pt';
+    wrap.style.marginBottom = '3pt';
+    if (block.pageBreakBefore) wrap.dataset.pageBreak = '1';
+    if (typeof TFPhotos === 'undefined' || !TFPhotos.info(block.photoId)) {
+      wrap.className += ' pv-image-missing';
+      wrap.textContent = '[ไม่พบรูปนี้ในเครื่อง — เพิ่มรูปใหม่ในแท็บบันทึกผลการทดลอง]';
+      return wrap;
+    }
+    var size = TFPhotos.fitPt(block.photoId, spec);
+    var img = document.createElement('img');
+    img.alt = 'ภาพประกอบ';
+    img.style.width = size.w + 'pt';
+    img.style.height = size.h + 'pt';
+    img.style.objectFit = 'contain';
+    img.style.display = 'inline-block';
+    img.style.background = '#f1f1f1';
+    wrap.appendChild(img);
+    TFPhotos.attach(img, block.photoId);
+    return wrap;
+  }
+
   /** สร้าง element ของย่อหน้าเดียว */
   function makeBlockEl(block, spec) {
     if (block.type === 'table' && block.rows) return makeTableEl(block, spec);
+    if (block.type === 'image') return makeImageEl(block, spec);
     var type = block.type || 'body';
     var st = Object.assign({}, spec.styles[type] || spec.styles.body, block.style || {});
     var el = document.createElement('div');

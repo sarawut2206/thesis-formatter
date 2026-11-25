@@ -70,6 +70,9 @@ var TFParser = (function () {
     return false;
   }
 
+  // บรรทัดรูปภาพ  [รูป:p0123456789ab]  (รหัสจาก TFPhotos)
+  var IMAGE_RE = /^\[\s*รูป\s*:\s*(p[0-9a-f]{12})\s*\]$/;
+
   var RE = {
     chapterNum:   /^บทที่\s*[\d\u0E50-\u0E59IVXivx]+\s*$/,
     chapterNumIn: /^บทที่\s*([\d\u0E50-\u0E59IVXivx]+)\s*(.*)$/,
@@ -99,6 +102,7 @@ var TFParser = (function () {
     if (/^>\s/.test(t)) return true;
     if (RE.chapterNum.test(t)) return true;
     if (RE.caption.test(t)) return true;
+    if (IMAGE_RE.test(t)) return true;
     if (RE.num1.test(t) || RE.num2.test(t) || RE.num3.test(t) || RE.num4.test(t)) return true;
     if (RE.bullet.test(t) || RE.paren.test(t) || RE.thaiLetter.test(t)) return true;
     if (RE.centerWord.test(t)) return true;
@@ -317,6 +321,13 @@ var TFParser = (function () {
         continue;
       }
 
+      var im = t.match(IMAGE_RE);
+      if (im) {
+        blocks.push({ type: 'image', photoId: im[1], text: t });
+        prevType = 'image';
+        continue;
+      }
+
       // ตารางกินหลายบรรทัด จึงต้องตรวจก่อนจำแนกย่อหน้าเดี่ยว
       if (opt.tables !== false) {
         var tbl = readTable(lines, i);
@@ -339,6 +350,9 @@ var TFParser = (function () {
         sawChapterTitle: sawChapterTitle,
         isFirstContent: blocks.length === 0
       });
+
+      // คำบรรยายใต้รูป (ภาพที่ ...) จัดกึ่งกลางใต้รูป
+      if (b.type === 'caption' && prevType === 'image') b.style = { align: 'center', indent: 0, firstLine: 0 };
 
       if (b.type === 'chapterNum') sawChapterNum = true;
       if (b.type === 'chapterTitle') sawChapterTitle = true;
@@ -516,6 +530,7 @@ var TFParser = (function () {
     tidy: tidy,
     isThai: isThai,
     readTable: readTable,
-    tableSummary: tableSummary
+    tableSummary: tableSummary,
+    IMAGE_RE: IMAGE_RE
   };
 })();

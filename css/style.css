@@ -336,3 +336,27 @@ kbd {
   background: var(--bg); border: 1px solid var(--line); border-bottom-width: 2px;
   border-radius: 5px; padding: 0 5px; font-size: 12px; font-family: inherit;
 }
+
+/* ---------- บันทึกผล → บทที่ 4–6 ---------- */
+.voice { display: flex; flex-direction: column; gap: 4px; }
+.voice textarea { width: 100%; min-height: 64px; resize: vertical; font-family: inherit; font-size: 14px; }
+.voice-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.voice-btn.on { background: var(--danger); border-color: var(--danger); color: #fff; }
+.voice-status { font-size: 12px; color: var(--danger); }
+.res-status { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chip { font-size: 12.5px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); }
+.chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.chip.empty { color: var(--ink-soft); }
+.res-trial { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 8px; }
+.res-trial-head { display: flex; justify-content: space-between; align-items: center; }
+.res-photo-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.res-thumb { width: 84px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); }
+.dropzone { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 26px 14px; border: 2px dashed var(--brand); border-radius: var(--radius); background: var(--brand-lt); color: var(--brand); text-align: center; cursor: pointer; }
+.dropzone.drag { border-style: solid; }
+.dropzone small { color: var(--ink-soft); }
+.res-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 12px; }
+.res-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.res-card-img { width: 100%; height: 150px; object-fit: cover; border-radius: 6px; background: var(--bg); }
+.res-card-tools { display: flex; gap: 4px; justify-content: space-between; }
+.res-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.photo-missing, .pv-image-missing { color: var(--danger); font-size: 12px; }

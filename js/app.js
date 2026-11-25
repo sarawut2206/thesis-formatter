@@ -30,7 +30,7 @@
       presetId: TFTemplates.DEFAULT_PRESET,
       spec: TFTemplates.clone(TFTemplates.preset(TFTemplates.DEFAULT_PRESET).spec),
       docs: {
-        ch1: emptyDoc(), ch2: emptyDoc(), ch3: emptyDoc(), ch4: emptyDoc(), ch5: emptyDoc(),
+        ch1: emptyDoc(), ch2: emptyDoc(), ch3: emptyDoc(), ch4: emptyDoc(), ch5: emptyDoc(), ch6: emptyDoc(),
         bib: emptyDoc({ join: 'never', smart: false, sort: true }),
         appendix: emptyDoc({ join: 'auto', smart: true })
       },
@@ -46,6 +46,12 @@
         keywordsTh: '', keywordsEn: ''
       },
       abstracts: { th: '', en: '' },
+      // ข้อมูลสำหรับเขียนบทที่ 4–6 (รูปเก็บใน TFPhotos อ้างด้วยรหัส)
+      results: {
+        notes: '', usage: '', share: '', suggestions: '',
+        trials: [{ id: 't1', name: 'สูตรที่ 1', recipe: '', result: '', value: '', unit: '', photo: '' }],
+        photos: []
+      },
       ack: '',
       vita: [emptyPerson()],
       front: {
@@ -55,7 +61,7 @@
         tables: '', figures: ''
       },
       exportParts: {
-        front: true, ch1: true, ch2: true, ch3: true, ch4: true, ch5: true,
+        front: true, ch1: true, ch2: true, ch3: true, ch4: true, ch5: true, ch6: true,
         bib: true, appendix: true, vita: true
       }
     };
@@ -249,8 +255,10 @@
     { id: 'ch1', label: 'บทที่ 1', kind: 'chapter', chapter: 1 },
     { id: 'ch2', label: 'บทที่ 2', kind: 'chapter', chapter: 2 },
     { id: 'ch3', label: 'บทที่ 3', kind: 'chapter', chapter: 3 },
+    { id: 'results', label: '📷 บันทึกผล → บท 4–6', kind: 'results' },
     { id: 'ch4', label: 'บทที่ 4', kind: 'chapter', chapter: 4 },
     { id: 'ch5', label: 'บทที่ 5', kind: 'chapter', chapter: 5 },
+    { id: 'ch6', label: 'บทที่ 6', kind: 'chapter', chapter: 6 },
     { id: 'bib', label: 'บรรณานุกรม', kind: 'bib' },
     { id: 'appendix', label: 'ภาคผนวก', kind: 'appendix' },
     { id: 'front', label: 'ส่วนหน้า', kind: 'front' },
@@ -285,6 +293,7 @@
       case 'front':    main.appendChild(buildFront()); break;
       case 'vita':     main.appendChild(buildVita()); break;
       case 'ai':       main.appendChild(buildAI()); break;
+      case 'results':  main.appendChild(buildResults()); break;
       case 'settings': main.appendChild(buildSettings()); break;
       case 'export':   main.appendChild(buildExport()); break;
       case 'help':     main.appendChild(buildHelp()); break;
@@ -398,7 +407,7 @@
 
     // ปุ่มให้ AI ร่างบทนี้ — แสดงเฉพาะบทที่ 2–5 และเมื่อใส่คีย์ไว้แล้ว
     var aiBtn = root.querySelector('.js-ai');
-    if (tab.chapter >= 2 && tab.chapter <= 5) {
+    if (tab.chapter >= 2 && tab.chapter <= 6) {
       aiBtn.hidden = false;
       aiBtn.addEventListener('click', function () {
         if (!TFAI.hasKey()) {
@@ -506,6 +515,479 @@
   }
 
   /* ==================================================================
+   * บันทึกผลการทดลอง → เขียนบทที่ 4–6
+   *   นักเรียนเล่า (พิมพ์หรือพูด) + ใส่สูตรพร้อมตัวเลข + โยนรูปลงไป
+   *   แล้วให้ AI อ่านบทที่ 1–3 ดูรูป และเขียนบทที่ 4–6 ลงในแท็บของแต่ละบท
+   * ================================================================== */
+  function emptyTrial(n) {
+    return {
+      id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: 'สูตรที่ ' + n, recipe: '', result: '', value: '', unit: '', photo: ''
+    };
+  }
+
+  /** ช่องข้อความที่พิมพ์ได้ และกด 🎤 พูดภาษาไทยได้ (ถ้าเบราว์เซอร์รองรับ) */
+  function voiceBox(value, onInput, placeholder, rows) {
+    var ta = el('textarea', { placeholder: placeholder || '', rows: rows || 3 });
+    ta.value = value || '';
+    ta.addEventListener('input', function () { onInput(ta.value); });
+    var wrap = el('div', { class: 'voice' }, [ta]);
+
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return wrap;
+
+    var status = el('span', { class: 'voice-status' });
+    var rec = null;
+    var btn = el('button', { class: 'btn tiny voice-btn', type: 'button', text: '🎤 พูด' });
+    btn.addEventListener('click', function () {
+      if (rec) { rec.stop(); return; }
+      rec = new SR();
+      rec.lang = 'th-TH';
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.onresult = function (e) {
+        var fin = '', tmp = '';
+        for (var i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+          else tmp += e.results[i][0].transcript;
+        }
+        if (fin.trim()) {
+          ta.value += (ta.value && !/\s$/.test(ta.value) ? ' ' : '') + fin.trim();
+          onInput(ta.value);
+        }
+        status.textContent = tmp ? 'กำลังฟัง… ' + tmp : 'กำลังฟัง…';
+      };
+      rec.onerror = function (e) {
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('ไม่ได้รับอนุญาตให้ใช้ไมโครโฟน', true);
+        else if (e.error === 'network') toast('ระบบฟังเสียงต้องต่ออินเทอร์เน็ต', true);
+      };
+      rec.onend = function () { rec = null; btn.textContent = '🎤 พูด'; btn.classList.remove('on'); status.textContent = ''; };
+      try { rec.start(); btn.textContent = '■ หยุดฟัง'; btn.classList.add('on'); status.textContent = 'กำลังฟัง…'; }
+      catch (err) { rec = null; }
+    });
+    wrap.appendChild(el('div', { class: 'voice-bar' }, [btn, status]));
+    return wrap;
+  }
+
+  function thumb(id, cls) {
+    var img = el('img', { class: cls || 'res-thumb', alt: '' });
+    TFPhotos.attach(img, id);
+    return img;
+  }
+
+  /** รูปทั้งหมดของผลการทดลอง เรียงตามลำดับ พร้อมป้าย P1, P2, ... สำหรับให้ AI อ้างถึง */
+  function resultPhotoList() {
+    var r = S.results, seen = {}, out = [];
+    r.trials.forEach(function (t) {
+      if (t.photo && !seen[t.photo] && TFPhotos.info(t.photo)) {
+        seen[t.photo] = 1;
+        out.push({ id: t.photo, note: t.name + (t.result ? ' (ผล: ' + t.result + ')' : '') });
+      }
+    });
+    r.photos.forEach(function (p) {
+      if (p.id && !seen[p.id] && TFPhotos.info(p.id)) { seen[p.id] = 1; out.push({ id: p.id, note: p.note || '' }); }
+    });
+    return out.map(function (p, i) { return Object.assign(p, { label: 'P' + (i + 1) }); });
+  }
+
+  /** ลบรูปออกจากคลัง ถ้าไม่มีที่ไหนใช้แล้ว (ผลการทดลอง หรือข้อความบทใด ๆ) */
+  function dropPhotoIfUnused(id) {
+    if (!id) return;
+    var used = S.results.trials.some(function (t) { return t.photo === id; }) ||
+               S.results.photos.some(function (p) { return p.id === id; }) ||
+               Object.keys(S.docs).some(function (k) { return TFPhotos.idsInText(S.docs[k].text).indexOf(id) >= 0; });
+    if (!used) TFPhotos.remove(id);
+  }
+
+  function addPhotoFiles(files, onEach) {
+    var list = Array.prototype.slice.call(files || []);
+    var done = 0, errors = [];
+    return list.reduce(function (p, f) {
+      return p.then(function () {
+        toast('กำลังเพิ่มรูป ' + (done + 1) + '/' + list.length + '…');
+        return TFPhotos.add(f).then(onEach).catch(function (e) { errors.push(e.message); })
+          .then(function () { done++; });
+      });
+    }, Promise.resolve()).then(function () {
+      if (errors.length) toast('เพิ่มได้ ' + (list.length - errors.length) + ' รูป — ' + errors.join(', '), true);
+      else if (list.length) toast('เพิ่มรูปแล้ว ' + list.length + ' รูป');
+    });
+  }
+
+  function buildResults() {
+    var r = S.results;
+    var wrap = el('div', { class: 'form-page results-page' });
+
+    // ---- 0) คำอธิบาย + สถานะบทที่ 1–3 ----
+    var c0 = el('div', { class: 'card' }, [
+      el('h2', { text: '📷 บันทึกผลการทดลอง แล้วให้ AI เขียนบทที่ 4–6' }),
+      el('p', { class: 'hint', html:
+        'เล่าว่าทำอะไรไป ได้ผลอย่างไร (พิมพ์หรือกด <b>🎤 พูด</b>) ใส่สูตรพร้อมตัวเลขที่วัดได้ แล้วโยนรูปทั้งหมดลงไป ' +
+        'ระบบจะอ่าน<b>บทที่ 1–3 ที่เขียนไว้ในแท็บของแต่ละบท</b> ดูรูป แล้วเขียน<b>บทที่ 4 ผลการดำเนินงาน · บทที่ 5 สรุป อภิปรายผล · บทที่ 6 การนำไปใช้</b> ' +
+        'พร้อมใส่รูปและคำบรรยาย “ภาพที่ 4.x” ให้ แก้ข้อความต่อได้ในแท็บบทที่ 4–6' })
+    ]);
+    var st = el('div', { class: 'res-status' });
+    [1, 2, 3].forEach(function (n) {
+      var len = (S.docs['ch' + n].text || '').trim().length;
+      st.appendChild(el('span', { class: 'chip ' + (len ? 'ok' : 'empty'),
+        text: 'บทที่ ' + n + (len ? ' ✓ ' + len.toLocaleString('th-TH') + ' ตัวอักษร' : ' ยังว่าง') }));
+    });
+    st.appendChild(el('span', { class: 'chip ' + (TFAI.hasKey() ? 'ok' : 'empty'),
+      text: TFAI.hasKey() ? 'AI พร้อมใช้' : 'ยังไม่ได้ใส่คีย์ AI (จะได้ร่างแบบเรียงข้อมูลให้)' }));
+    c0.appendChild(st);
+    wrap.appendChild(c0);
+
+    // ---- 1) เล่าผล ----
+    wrap.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '1. เล่าผลการดำเนินงาน' }),
+      el('p', { class: 'hint', text: 'เล่าแบบภาษาพูดได้เลย เช่น ทำกี่สูตร วางไว้ที่ไหน กี่วัน สูตรไหนดีที่สุด เพราะอะไร' }),
+      voiceBox(r.notes, function (v) { r.notes = v; save(); },
+        'เช่น พวกเราทำเครื่องดักแมลงจากขวดพลาสติก ลองน้ำล่อ 3 สูตร วางที่โรงอาหาร 2 วัน สูตรน้ำหวานผสมยีสต์จับได้มากที่สุด…', 5)
+    ]));
+
+    // ---- 2) สูตร / การทดลอง ----
+    var c2 = el('div', { class: 'card' }, [
+      el('h2', { text: '2. สูตร / การทดลองแต่ละครั้ง' }),
+      el('p', { class: 'hint', text: 'ใส่ตัวเลขที่วัดได้จริง ระบบจะทำเป็น “ตารางที่ 4.1” ให้เอง (AI จะไม่แต่งตัวเลขเพิ่ม)' })
+    ]);
+    r.trials.forEach(function (t, i) {
+      var photoArea = el('div', { class: 'res-photo-row' });
+      var pick = el('input', { type: 'file', accept: 'image/*', hidden: true });
+      pick.addEventListener('change', function () {
+        var f = pick.files && pick.files[0];
+        pick.value = '';
+        if (!f) return;
+        addPhotoFiles([f], function (ph) { var old = t.photo; t.photo = ph.id; save(); dropPhotoIfUnused(old); })
+          .then(renderMain);
+      });
+      photoArea.appendChild(el('button', { class: 'btn tiny', type: 'button', text: t.photo ? '🔄 เปลี่ยนรูป' : '📷 ใส่รูปของสูตรนี้',
+        onclick: function () { pick.click(); } }));
+      photoArea.appendChild(pick);
+      if (t.photo) {
+        photoArea.appendChild(thumb(t.photo));
+        photoArea.appendChild(el('button', { class: 'btn tiny ghost danger', type: 'button', text: 'เอารูปออก',
+          onclick: function () { var old = t.photo; t.photo = ''; save(); dropPhotoIfUnused(old); renderMain(); } }));
+      }
+
+      var nameIn = el('input', { type: 'text', placeholder: 'เช่น สูตรที่ 1 น้ำหวาน + ยีสต์' });
+      nameIn.value = t.name;
+      nameIn.addEventListener('input', function () { t.name = nameIn.value; save(); });
+      var valIn = el('input', { type: 'text', inputmode: 'decimal', placeholder: 'เช่น 25' });
+      valIn.value = t.value;
+      valIn.addEventListener('input', function () { t.value = valIn.value; save(); });
+      var unitIn = el('input', { type: 'text', placeholder: 'เช่น ตัว' });
+      unitIn.value = t.unit;
+      unitIn.addEventListener('input', function () { t.unit = unitIn.value; save(); });
+
+      c2.appendChild(el('div', { class: 'res-trial' }, [
+        el('div', { class: 'res-trial-head' }, [
+          el('strong', { text: 'รายการที่ ' + (i + 1) }),
+          el('button', { class: 'btn tiny ghost danger', type: 'button', text: 'ลบรายการ', onclick: function () {
+            if (!confirm('ลบ ' + (t.name || 'รายการนี้') + '?')) return;
+            r.trials.splice(i, 1); save(); dropPhotoIfUnused(t.photo); renderMain();
+          } })
+        ]),
+        el('div', { class: 'field' }, [el('label', { text: 'ชื่อสูตร / การทดลอง' }), nameIn]),
+        el('div', { class: 'field' }, [el('label', { text: 'วิธีทำ / ส่วนผสม' }),
+          voiceBox(t.recipe, function (v) { t.recipe = v; save(); }, 'เช่น น้ำตาล 2 ช้อนโต๊ะ ยีสต์ 1 ช้อนชา น้ำอุ่น 200 มิลลิลิตร', 2)]),
+        el('div', { class: 'field' }, [el('label', { text: 'ผลที่ได้' }),
+          voiceBox(t.result, function (v) { t.result = v; save(); }, 'เช่น จับแมลงวันได้มาก กลิ่นแรง', 2)]),
+        el('div', { class: 'grid2' }, [
+          el('div', { class: 'field' }, [el('label', { text: 'ตัวเลขที่วัดได้ (ถ้ามี)' }), valIn]),
+          el('div', { class: 'field' }, [el('label', { text: 'หน่วย' }), unitIn])
+        ]),
+        photoArea
+      ]));
+    });
+    c2.appendChild(el('button', { class: 'btn', type: 'button', text: '＋ เพิ่มสูตร / การทดลอง', onclick: function () {
+      var last = r.trials[r.trials.length - 1];
+      var t = emptyTrial(r.trials.length + 1);
+      if (last) t.unit = last.unit;
+      r.trials.push(t); save(); renderMain();
+    } }));
+    wrap.appendChild(c2);
+
+    // ---- 3) รูปภาพ ----
+    var c3 = el('div', { class: 'card' }, [
+      el('h2', { text: '3. รูปภาพผลงาน (' + r.photos.length + ' รูป)' }),
+      el('p', { class: 'hint', text: 'รูปตอนทดลอง ตอนนำไปใช้ ผลที่ได้ ตอนนำเสนอ — เลือกได้หลายรูปพร้อมกัน คำอธิบายใต้รูปไม่ใส่ก็ได้ AI จะดูรูปเอง (ควรเลี่ยงรูปที่เห็นหน้านักเรียนชัด)' })
+    ]);
+    var multi = el('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true });
+    var drop = el('div', { class: 'dropzone', tabindex: '0', role: 'button' }, [
+      el('b', { text: '📷 แตะเพื่อเลือกรูป หรือลากรูปมาวางที่นี่' }),
+      el('small', { text: 'รูปเก็บไว้ในเบราว์เซอร์เครื่องนี้ — ใช้ปุ่ม “บันทึกงาน” ด้านบนเพื่อเก็บสำรองพร้อมรูป' })
+    ]);
+    var addMany = function (files) {
+      addPhotoFiles(files, function (ph) { r.photos.push({ id: ph.id, note: '' }); save(); }).then(renderMain);
+    };
+    drop.addEventListener('click', function () { multi.click(); });
+    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); multi.click(); } });
+    drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('drag'); });
+    drop.addEventListener('dragleave', function () { drop.classList.remove('drag'); });
+    drop.addEventListener('drop', function (e) { e.preventDefault(); drop.classList.remove('drag'); addMany(e.dataTransfer.files); });
+    multi.addEventListener('change', function () { var f = multi.files; addMany(f); multi.value = ''; });
+    c3.appendChild(drop);
+    c3.appendChild(multi);
+
+    var grid = el('div', { class: 'res-grid' });
+    r.photos.forEach(function (p, i) {
+      grid.appendChild(el('div', { class: 'res-card' }, [
+        thumb(p.id, 'res-card-img'),
+        el('div', { class: 'res-card-tools' }, [
+          el('button', { class: 'btn tiny ghost', type: 'button', text: '◀', title: 'เลื่อนไปก่อน', disabled: i === 0,
+            onclick: function () { var a = r.photos; var x = a[i - 1]; a[i - 1] = a[i]; a[i] = x; save(); renderMain(); } }),
+          el('button', { class: 'btn tiny ghost', type: 'button', text: '▶', title: 'เลื่อนไปหลัง', disabled: i === r.photos.length - 1,
+            onclick: function () { var a = r.photos; var x = a[i + 1]; a[i + 1] = a[i]; a[i] = x; save(); renderMain(); } }),
+          el('button', { class: 'btn tiny ghost danger', type: 'button', text: 'ลบ',
+            onclick: function () { r.photos.splice(i, 1); save(); dropPhotoIfUnused(p.id); renderMain(); } })
+        ]),
+        voiceBox(p.note, function (v) { p.note = v; save(); }, 'รูปนี้คืออะไร (ไม่ใส่ก็ได้)', 2)
+      ]));
+    });
+    c3.appendChild(grid);
+    wrap.appendChild(c3);
+
+    // ---- 4) การนำไปใช้ / เผยแพร่ ----
+    wrap.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: '4. การนำไปใช้ การเผยแพร่ และข้อเสนอแนะ' }),
+      el('div', { class: 'field' }, [el('label', { text: 'นำไปใช้ที่ไหน กับใคร ได้ผลอย่างไร (บทที่ 6)' }),
+        voiceBox(r.usage, function (v) { r.usage = v; save(); }, 'เช่น นำไปวางที่โรงอาหาร แม่ค้าบอกว่าแมลงวันลดลง', 3)]),
+      el('div', { class: 'field' }, [el('label', { text: 'เผยแพร่ผลงานอย่างไร (บทที่ 6)' }),
+        voiceBox(r.share, function (v) { r.share = v; save(); }, 'เช่น นำเสนอหน้าเสาธง ทำโปสเตอร์ โพสต์เพจโรงเรียน', 2)]),
+      el('div', { class: 'field' }, [el('label', { text: 'ถ้าจะพัฒนาต่อ ควรทำอะไร (ข้อเสนอแนะ บทที่ 5)' }),
+        voiceBox(r.suggestions, function (v) { r.suggestions = v; save(); }, 'เช่น ลองขวดใหญ่ขึ้น ทดลองให้นานขึ้น', 2)])
+    ]));
+
+    // ---- 5) สร้างบท ----
+    var c5 = el('div', { class: 'card' }, [
+      el('h2', { text: '5. เขียนบทที่ 4–6' }),
+      el('p', { class: 'hint', text: TFAI.hasKey()
+        ? 'AI จะดูรูป (สูงสุด 12 รูป แบบย่อขนาด) และอ่านบทที่ 1–3 แล้วเขียนบทที่ 4, 5, 6 ลงในแท็บของแต่ละบท — ใช้เวลาประมาณ 1 นาที'
+        : 'ยังไม่ได้ใส่คีย์ AI — ระบบจะเรียงข้อมูลที่กรอกเป็นร่างบทที่ 4–6 ให้ก่อน (ใส่คีย์ได้ที่แท็บ “✨ ผู้ช่วย AI” เพื่อให้ AI เรียบเรียงและดูรูป)' })
+    ]);
+    var extra = el('textarea', { placeholder: 'คำสั่งเพิ่มเติมถึง AI (ไม่บังคับ) เช่น "บทที่ 4 แบ่งเป็นตอนที่ 1 การสร้าง ตอนที่ 2 การทดลอง"' });
+    extra.style.minHeight = '60px';
+    c5.appendChild(el('div', { class: 'field' }, [extra]));
+    var log = el('div', { class: 'ai-log' });
+    var go = el('button', { class: 'btn primary', type: 'button', text: '✨ เขียนบทที่ 4–6' });
+    go.addEventListener('click', function () {
+      go.disabled = true;
+      go.textContent = TFAI.hasKey() ? 'AI กำลังดูรูปและเขียน… (ประมาณ 1 นาที)' : 'กำลังสร้างร่าง…';
+      log.textContent = '';
+      writeChapters456(extra.value)
+        .then(function (res) {
+          log.textContent = res.message;
+          toast('เขียนบทที่ ' + res.written.join(', ') + ' แล้ว — เปิดแท็บของแต่ละบทเพื่อตรวจและแก้ไข');
+          renderTabs();
+          renderResultLinks(res.written);
+        })
+        .catch(function (e) { if (e && e.message) log.textContent = '❌ ' + e.message; })
+        .then(function () { go.disabled = false; go.textContent = '✨ เขียนบทที่ 4–6'; });
+    });
+    var links = el('div', { class: 'res-links' });
+    function renderResultLinks(written) {
+      links.innerHTML = '';
+      (written || []).forEach(function (n) {
+        links.appendChild(el('button', { class: 'btn', type: 'button', text: 'เปิดบทที่ ' + n + ' →', onclick: function () {
+          S.activeTab = 'ch' + n; save(); renderTabs(); renderMain();
+        } }));
+      });
+    }
+    c5.appendChild(el('div', { class: 'pane-tools' }, [go]));
+    c5.appendChild(log);
+    c5.appendChild(links);
+    wrap.appendChild(c5);
+    return wrap;
+  }
+
+  /** ตารางผลการทดลองในรูปแบบที่โปรแกรมแปลงเป็นตาราง Word ได้ */
+  function trialsTableText() {
+    var rows = S.results.trials.filter(function (t) { return (t.name || '').trim() || (t.result || '').trim(); });
+    if (!rows.length) return '';
+    var cell = function (s) { return String(s || '-').replace(/\|/g, '/').replace(/\s*\n\s*/g, ' ').trim() || '-'; };
+    var out = ['ตารางที่ 4.1 ผลการทดลองแต่ละสูตร', '| ลำดับ | สูตร/การทดลอง | วิธีทำ/ส่วนผสม | ผลที่ได้ |', '|---|---|---|---|'];
+    rows.forEach(function (t, i) {
+      var val = (t.value || '').trim() ? '(' + [t.value.trim(), (t.unit || '').trim()].filter(Boolean).join(' ') + ')' : '';
+      out.push('| ' + (i + 1) + ' | ' + cell(t.name) + ' | ' + cell(t.recipe) + ' | ' + cell([t.result, val].filter(Boolean).join(' ')) + ' |');
+    });
+    return out.join('\n');
+  }
+
+  /** ร่างแบบไม่ใช้ AI — เรียงข้อมูลที่นักเรียนกรอกเป็นโครงบทที่ 4–6 */
+  function fallbackChapters(photoList) {
+    var r = S.results, T = TFTemplates.CHAPTERS;
+    var byId = {};
+    photoList.forEach(function (p) { byId[p.id] = p; });
+    var used = {};
+    var L = ['===== บทที่ 4 =====', 'บทที่ 4', T[4].title, ''];
+    L.push('จากการดำเนินงาน' + (S.meta.titleTh ? 'สร้าง' + String(S.meta.titleTh).replace(/\n/g, ' ') : '') + ' ผู้จัดทำได้ผลการดำเนินงานดังนี้' + (r.notes ? ' ' + r.notes.replace(/\s*\n\s*/g, ' ') : ''));
+    r.trials.filter(function (t) { return t.name || t.result; }).forEach(function (t) {
+      L.push('', '# ' + (t.name || 'การทดลอง'));
+      L.push([t.recipe ? 'วิธีทำและส่วนผสม ' + t.recipe : '', t.result ? 'ผลที่ได้ ' + t.result : '',
+              t.value ? 'วัดได้ ' + t.value + ' ' + (t.unit || '') : ''].filter(Boolean).join(' ').replace(/\s*\n\s*/g, ' ') || '(เติมผลการทดลอง)');
+      if (t.photo && byId[t.photo]) { used[t.photo] = 1; L.push('[รูป ' + byId[t.photo].label + ']', 'ภาพที่ 4.1 ' + (t.name || 'ภาพการทดลอง')); }
+    });
+    L.push('', '[ตารางผลการทดลอง]');
+    var rest = photoList.filter(function (p) { return !used[p.id]; });
+    if (rest.length) {
+      L.push('', '# ภาพการดำเนินงาน');
+      rest.forEach(function (p) { L.push('[รูป ' + p.label + ']', 'ภาพที่ 4.1 ' + (p.note || 'ภาพการดำเนินงาน')); });
+    }
+    L.push('', '===== บทที่ 5 =====', 'บทที่ 5', T[5].title, '');
+    L.push('# สรุปผล', 'จากการดำเนินงาน สรุปผลได้ว่า (สรุปผลให้ตอบวัตถุประสงค์ทุกข้อในบทที่ 1)' + (r.notes ? ' ' + r.notes.replace(/\s*\n\s*/g, ' ') : ''), '');
+    L.push('# อภิปรายผล', '(อธิบายว่าเพราะเหตุใดผลจึงเป็นเช่นนี้ โดยโยงกับความรู้ในบทที่ 2)', '');
+    L.push('# ข้อเสนอแนะ');
+    var sug = [r.suggestions].filter(Boolean).join('\n').split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!sug.length) sug = ['(เติมข้อเสนอแนะ)'];
+    sug.forEach(function (s, i) { L.push((i + 1) + '. ' + s); });
+    L.push('', '===== บทที่ 6 =====', 'บทที่ 6', T[6].title, '');
+    L.push('# การนำไปใช้ประโยชน์', r.usage ? r.usage.replace(/\s*\n\s*/g, ' ') : '(เติมว่านำไปใช้ที่ไหน กับใคร ได้ผลอย่างไร)', '');
+    L.push('# การเผยแพร่ผลงาน', r.share ? r.share.replace(/\s*\n\s*/g, ' ') : '(เติมช่องทางการเผยแพร่ผลงาน)', '');
+    L.push('# ประโยชน์ที่ได้รับ', '(เติมประโยชน์ที่ได้รับจากโครงงานนี้)');
+    return L.join('\n');
+  }
+
+  /**
+   * แปลงข้อความที่ได้ (จาก AI หรือร่างสำรอง) เป็นข้อความของบทที่ 4, 5, 6
+   *  - [รูป P1]  -> [รูป:รหัสรูปจริง]  (ตัดป้ายที่ไม่มีอยู่จริงหรือใช้ซ้ำ)
+   *  - [ตารางผลการทดลอง] -> ตารางจากตัวเลขที่นักเรียนกรอก
+   *  - เรียงเลข "ภาพที่ N.x" และ "ตารางที่ N.x" ใหม่ในแต่ละบท
+   */
+  function finalizeChapters(raw, photoList) {
+    var text = TFAI.cleanOutput(raw).replace(/\r/g, '');
+    var chunks = {};
+    var sep = /^\s*=+\s*บทที่\s*([456])\s*=+\s*$/gm;
+    var marks = [], m;
+    while ((m = sep.exec(text))) marks.push({ n: m[1], start: m.index, end: sep.lastIndex });
+    if (!marks.length) {   // AI ไม่ได้ใส่บรรทัดคั่น — แยกจากบรรทัด "บทที่ N" แทน
+      var re2 = /^\s*บทที่\s*([456])\s*$/gm;
+      while ((m = re2.exec(text))) marks.push({ n: m[1], start: m.index, end: m.index });
+    }
+    marks.forEach(function (mk, i) {
+      if (!chunks[mk.n]) chunks[mk.n] = text.slice(mk.end, i + 1 < marks.length ? marks[i + 1].start : text.length).trim();
+    });
+
+    var byLabel = {};
+    photoList.forEach(function (p) { byLabel[p.label.toUpperCase()] = p; });
+    var usedIds = {};
+    var table = trialsTableText();
+    var out = {};
+
+    Object.keys(chunks).forEach(function (n) {
+      var lines = chunks[n].split('\n');
+      var title = TFTemplates.CHAPTERS[n].title;
+      // ให้ขึ้นต้นด้วย "บทที่ N" + ชื่อบท เสมอ
+      var firstIdx = lines.findIndex(function (l) { return l.trim(); });
+      if (firstIdx < 0 || !new RegExp('^\\s*บทที่\\s*' + n + '\\s*$').test(lines[firstIdx])) lines.unshift('บทที่ ' + n, title, '');
+
+      var res = [], tablePlaced = false;
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        var im = line.match(/^\s*\[\s*รูป\s*:?\s*(P\d+)\s*\]\s*$/i);
+        if (im) {
+          var p = byLabel[im[1].toUpperCase()];
+          var j = i + 1;
+          while (j < lines.length && !lines[j].trim()) j++;
+          var hasCaption = j < lines.length && /^\s*(ภาพที่|ภาพประกอบที่)/.test(lines[j]);
+          if (!p || usedIds[p.id]) { if (hasCaption) i = j; continue; }   // ป้ายแต่งขึ้นหรือใช้ซ้ำ: ตัดทิ้งพร้อมคำบรรยาย
+          usedIds[p.id] = 1;
+          res.push('[รูป:' + p.id + ']');
+          if (!hasCaption) res.push('ภาพที่ ' + n + '.1 ' + (p.note || 'ภาพประกอบ'));
+          continue;
+        }
+        if (/^\s*\[\s*ตารางผลการทดลอง\s*\]\s*$/.test(line)) {
+          if (table && !tablePlaced) { res.push('', table, ''); tablePlaced = true; }
+          continue;
+        }
+        res.push(line);
+      }
+      if (n === '4' && table && !tablePlaced) res.push('', table);
+
+      // เรียงเลขภาพและตารางใหม่ภายในบท
+      var fig = 0, tbl = 0;
+      res = res.map(function (l) {
+        if (/^\s*(ภาพที่|ภาพประกอบที่)\s*[\d๐-๙]+(\.[\d๐-๙]+)*/.test(l)) {
+          fig++;
+          return l.replace(/^\s*(ภาพที่|ภาพประกอบที่)\s*[\d๐-๙]+(\.[\d๐-๙]+)*\s*/, 'ภาพที่ ' + n + '.' + fig + ' ');
+        }
+        if (/^\s*ตารางที่\s*[\d๐-๙]+(\.[\d๐-๙]+)*/.test(l)) {
+          tbl++;
+          return l.replace(/^\s*ตารางที่\s*[\d๐-๙]+(\.[\d๐-๙]+)*\s*/, 'ตารางที่ ' + n + '.' + tbl + ' ');
+        }
+        return l;
+      });
+      out[n] = res.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    });
+    return out;
+  }
+
+  function writeChapters456(extra) {
+    var filled = [4, 5, 6].filter(function (n) { return (S.docs['ch' + n].text || '').trim(); });
+    if (filled.length && !confirm('บทที่ ' + filled.join(', ') + ' มีข้อความอยู่แล้ว จะเขียนทับด้วยร่างใหม่?')) {
+      return Promise.reject(new Error(''));
+    }
+    var photoList = resultPhotoList();
+    var r = S.results;
+    var labelOf = {};
+    photoList.forEach(function (p) { labelOf[p.id] = p.label; });
+
+    var getRaw;
+    var aiUsed = TFAI.hasKey();
+    if (aiUsed) {
+      var forAI = photoList.slice(0, 12);
+      getRaw = Promise.all(forAI.map(function (p) {
+        return TFPhotos.forAI(p.id).then(function (im) { return im ? Object.assign(im, { label: 'รูป ' + p.label }) : null; });
+      })).then(function (images) {
+        var prompt = TFAI.buildResultsPrompt({
+          meta: S.meta,
+          ch1: S.docs.ch1.text, ch2: S.docs.ch2.text, ch3: S.docs.ch3.text,
+          results: {
+            notes: r.notes, usage: r.usage, share: r.share, suggestions: r.suggestions,
+            trials: r.trials.map(function (t) { return Object.assign({}, t, { photoLabel: labelOf[t.photo] || '' }); })
+          },
+          photoList: forAI,
+          titles: { 4: TFTemplates.CHAPTERS[4].title, 5: TFTemplates.CHAPTERS[5].title, 6: TFTemplates.CHAPTERS[6].title },
+          extra: extra
+        });
+        return TFAI.generate({ text: prompt, images: images.filter(Boolean) }, TFAI.SYSTEM_RESULTS);
+      });
+      photoList = forAI;
+    } else {
+      getRaw = Promise.resolve(fallbackChapters(photoList));
+    }
+
+    return getRaw.then(function (raw) {
+      var ch = finalizeChapters(raw, photoList);
+      var written = [];
+      [4, 5, 6].forEach(function (n) {
+        if (!ch[n]) return;
+        S.docs['ch' + n].text = ch[n];
+        S.docs['ch' + n].overrides = {};
+        // หัวข้อมีเครื่องหมาย # กำกับครบแล้ว จึงปิดการเดาหัวข้อจากบรรทัดสั้น (ไม่ให้ย่อหน้าสั้นกลายเป็นหัวข้อ)
+        S.docs['ch' + n].smart = false;
+        written.push(n);
+      });
+      if (!written.length) throw new Error('ไม่สามารถแยกบทจากคำตอบได้ ลองกดใหม่อีกครั้ง');
+      save();
+      var missing = [4, 5, 6].filter(function (n) { return written.indexOf(n) < 0; });
+      return {
+        written: written,
+        message: (aiUsed ? '✅ AI เขียนเสร็จ' : '✅ สร้างร่างจากข้อมูลที่กรอกแล้ว (ยังไม่ได้ใช้ AI)') +
+          ' — บทที่ ' + written.join(', ') +
+          (missing.length ? ' · ⚠ ไม่ได้บทที่ ' + missing.join(', ') + ' (คำตอบอาจยาวเกิน ลองกดใหม่)' : '') +
+          ' · ตรวจทุกย่อหน้าให้ตรงกับที่ทำจริงก่อนส่ง'
+      };
+    });
+  }
+
+  /** โหลดรูปที่ใช้ในบล็อกทั้งหมด (สำหรับฝังลงไฟล์ Word) */
+  function imagesFor(blockLists) {
+    var ids = [];
+    blockLists.forEach(function (bs) { (bs || []).forEach(function (b) { if (b.type === 'image') ids.push(b.photoId); }); });
+    return ids.length ? TFPhotos.collect(ids) : Promise.resolve({});
+  }
+
+  /* ==================================================================
    * ส่งออกเอกสารเดี่ยว
    * ================================================================== */
   function exportSingle(docId, tab) {
@@ -513,7 +995,10 @@
     if (!blocks.length) { toast('ยังไม่มีข้อความให้ส่งออก', true); return; }
 
     var name = tab.chapter ? ('บทที่-' + tab.chapter) : tab.label;
-    TFDocx.buildSingle(blocks, S.spec, { title: S.meta.titleTh, author: S.meta.authorsTh })
+    imagesFor([blocks])
+      .then(function (images) {
+        return TFDocx.buildSingle(blocks, S.spec, { title: S.meta.titleTh, author: S.meta.authorsTh }, null, images);
+      })
       .then(function (blob) {
         TFDocx.download(blob, name + '.docx');
         toast('สร้างไฟล์ ' + name + '.docx แล้ว');
@@ -872,7 +1357,7 @@
     }
 
     var list = el('div', { class: 'export-list' });
-    [2, 3, 4, 5].forEach(function (n) {
+    [2, 3, 4, 5, 6].forEach(function (n) {
       var info = TFTemplates.CHAPTERS[n];
       var has = (S.docs['ch' + n].text || '').trim().length > 0;
       var btn = el('button', {
@@ -936,7 +1421,7 @@
     var absBtn = el('button', {
       class: 'btn', text: '✨ ร่างบทคัดย่อ',
       onclick: function () {
-        var all = [1, 2, 3, 4, 5].map(function (n) { return S.docs['ch' + n].text || ''; })
+        var all = [1, 2, 3, 4, 5, 6].map(function (n) { return S.docs['ch' + n].text || ''; })
           .filter(Boolean).join('\n\n');
         if (!all.trim()) { toast('ยังไม่มีเนื้อหาให้สรุป', true); return; }
         absBtn.disabled = true; absBtn.textContent = 'กำลังร่าง…';
@@ -1243,7 +1728,7 @@
     var list = el('div', { class: 'export-list' });
     [
       ['ch1', 'บทที่ 1'], ['ch2', 'บทที่ 2'], ['ch3', 'บทที่ 3'],
-      ['ch4', 'บทที่ 4'], ['ch5', 'บทที่ 5'],
+      ['ch4', 'บทที่ 4'], ['ch5', 'บทที่ 5'], ['ch6', 'บทที่ 6'],
       ['bib', 'บรรณานุกรม'], ['appendix', 'ภาคผนวก'], ['vita', currentPreset().vitaTitle]
     ].forEach(function (r) {
       var n = r[0] === 'vita'
@@ -1315,7 +1800,7 @@
 
     // ---------- 2) เตรียมเนื้อเรื่อง (เพื่อคำนวณเลขหน้าในสารบัญ) ----------
     var bodySections = [];
-    ['ch1', 'ch2', 'ch3', 'ch4', 'ch5'].forEach(function (id) {
+    ['ch1', 'ch2', 'ch3', 'ch4', 'ch5', 'ch6'].forEach(function (id) {
       if (!ep[id]) return;
       var b = docBlocks(id);
       if (!b.length) return;
@@ -1443,7 +1928,10 @@
 
     var fname = (m.titleTh ? m.titleTh.slice(0, 40).replace(/[\\/:*?"<>|]/g, '') : 'รายงานโครงงาน') + '.docx';
 
-    return TFDocx.build({ sections: sections, spec: spec, meta: { title: m.titleTh, author: m.authorsTh } })
+    return imagesFor(sections.map(function (s) { return s.blocks; }))
+      .then(function (images) {
+        return TFDocx.build({ sections: sections, spec: spec, meta: { title: m.titleTh, author: m.authorsTh }, images: images });
+      })
       .then(function (blob) {
         TFDocx.download(blob, fname);
         toast('สร้างไฟล์ ' + fname + ' แล้ว (' + sections.length + ' section)');
@@ -1482,6 +1970,8 @@
         '<li><b>บทที่ 3 วิธีดำเนินการโครงงาน</b> — วัสดุอุปกรณ์ · ขั้นตอนการดำเนินงาน · การเก็บและวิเคราะห์ข้อมูล</li>' +
         '<li><b>บทที่ 4 ผลการดำเนินโครงงาน</b> — ผลการทดลอง ตาราง และภาพประกอบ</li>' +
         '<li><b>บทที่ 5 สรุปผล อภิปรายผล และข้อเสนอแนะ</b></li>' +
+        '<li><b>บทที่ 6 การนำไปใช้ประโยชน์และการเผยแพร่</b> (ถ้าโรงเรียนไม่ใช้บทที่ 6 ปล่อยว่างไว้ จะไม่ถูกรวมในเล่ม)</li>' +
+        '<li><b>📷 บันทึกผล → บท 4–6</b> — เล่าผล (พิมพ์หรือพูด) ใส่สูตรพร้อมตัวเลข โยนรูปลงไป แล้วให้ AI เขียนบทที่ 4–6 พร้อมรูปและคำบรรยาย</li>' +
         '<li><b>ส่วนท้าย</b> — บรรณานุกรม · ภาคผนวก · ประวัติผู้จัดทำ</li>'
     }));
     wrap.appendChild(c1);
@@ -1541,9 +2031,17 @@
    * บันทึก / เปิด / ล้าง
    * ================================================================== */
   document.getElementById('btn-save').addEventListener('click', function () {
-    var blob = new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' });
-    TFDocx.download(blob, 'thesis-project.json');
-    toast('บันทึกไฟล์งานแล้ว');
+    // แนบรูปที่ใช้ไปด้วย เพื่อให้เปิดงานต่อในเครื่องอื่นได้ครบ
+    var ids = [];
+    S.results.trials.forEach(function (t) { if (t.photo) ids.push(t.photo); });
+    S.results.photos.forEach(function (p) { ids.push(p.id); });
+    Object.keys(S.docs).forEach(function (k) { ids = ids.concat(TFPhotos.idsInText(S.docs[k].text)); });
+    TFPhotos.exportAll(ids).then(function (photos) {
+      var data = Object.assign({}, S, { photos: photos });
+      var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      TFDocx.download(blob, 'thesis-project.json');
+      toast('บันทึกไฟล์งานแล้ว' + (Object.keys(photos).length ? ' (พร้อมรูป ' + Object.keys(photos).length + ' รูป)' : ''));
+    }).catch(function (e) { toast('บันทึกไม่สำเร็จ: ' + e.message, true); });
   });
 
   document.getElementById('btn-load').addEventListener('click', function () {
@@ -1557,10 +2055,14 @@
     fr.onload = function () {
       try {
         var o = JSON.parse(fr.result);
+        var photos = o.photos;
+        delete o.photos;
         S = deepFill(o, defaultState());
         save();
-        renderTabs(); renderMain();
-        toast('เปิดไฟล์งานแล้ว');
+        TFPhotos.importAll(photos).then(function (n) {
+          renderTabs(); renderMain();
+          toast('เปิดไฟล์งานแล้ว' + (n ? ' (รูป ' + n + ' รูป)' : ''));
+        });
       } catch (err) {
         toast('ไฟล์ไม่ถูกต้อง', true);
       }
